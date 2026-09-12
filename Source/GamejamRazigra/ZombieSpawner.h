@@ -52,6 +52,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spawner", meta=(ClampMin="0"))
     int32 MaxAliveZombies = 20;
 
+    /** Total zombies this spawn point may produce before stopping. Zero means unlimited. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spawner", meta=(ClampMin="0"))
+    int32 TotalSpawnLimit = 20;
+
+    UPROPERTY(VisibleInstanceOnly, BlueprintReadOnly, Category="Spawner")
+    int32 TotalSpawned = 0;
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Spawner")
     TSubclassOf<AZombieCharacter> ZombieClass;
 

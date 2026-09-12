@@ -9,6 +9,7 @@ class ASharedHeroCharacter;
 class AZombieCharacter;
 class UAnimInstance;
 class UAnimMontage;
+class UAnimSequenceBase;
 class UCameraShakeBase;
 class UCoopHudWidget;
 class UCoopMenuWidget;
@@ -76,8 +77,42 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Animation")
     TSoftObjectPtr<UAnimMontage> ZombieAttackMontage;
 
+    /** Direct attack clip used to guarantee playback even when the AnimBP has no montage slot. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Animation")
+    TSoftObjectPtr<UAnimSequenceBase> ZombieAttackAnimation;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float HeroMaxHealth = 100.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
+    float HealingPerSecond = 18.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities")
+    FLinearColor HealingEffectColor = FLinearColor(0.02f, 1.0f, 0.08f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
+    float HealingEffectIntensity = 8.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities")
+    TSoftObjectPtr<UMaterialInterface> HealingEffectMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities")
+    FVector HealingEffectOffset = FVector(0.0f, 0.0f, 145.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0.1"))
+    float HealingPlusSize = 18.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities")
+    TSoftObjectPtr<UMaterialInterface> ShieldMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="50"))
+    float ShieldRadius = 135.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities")
+    FLinearColor ShieldColor = FLinearColor(0.0f, 0.12f, 0.65f, 0.10f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
+    float ShieldEmissiveIntensity = 2.0f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float WalkSpeed = 500.0f;

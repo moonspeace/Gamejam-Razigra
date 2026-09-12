@@ -61,6 +61,9 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<UBorder>> LegendChips;
 
+    UPROPERTY()
+    TArray<TObjectPtr<UBorder>> AbilityCards;
+
     /** Index 0/1 = player one/two horizontal (yaw) meters, then the vertical (pitch) meters. */
     UPROPERTY()
     TArray<TObjectPtr<UProgressBar>> AxisMeters;
@@ -105,6 +108,7 @@ private:
     UWidget* BuildAxisMeters();
     UProgressBar* BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color);
     UWidget* BuildLegend();
+    UWidget* BuildRoleAbilityCard();
     void BuildScoreAndGameOver(class UOverlay* Root);
     UFUNCTION()
     void HandleRestartClicked();

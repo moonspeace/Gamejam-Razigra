@@ -1,7 +1,11 @@
 #include "SharedHeroCharacter.h"
 
 #include "Camera/CameraComponent.h"
+#include "Camera/PlayerCameraManager.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
+#include "Components/TextBlock.h"
+#include "Components/WidgetComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "Animation/AnimInstance.h"
@@ -13,6 +17,8 @@
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
+#include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
 
 ASharedHeroCharacter::ASharedHeroCharacter()
@@ -42,6 +48,22 @@ ASharedHeroCharacter::ASharedHeroCharacter()
     FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
     FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
     FollowCamera->bUsePawnControlRotation = false;
+
+    ShieldMesh = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("ShieldMesh"));
+    ShieldMesh->SetupAttachment(RootComponent);
+    ShieldMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    ShieldMesh->SetCastShadow(false);
+    ShieldMesh->SetVisibility(false);
+    for (int32 Index = 0; Index < 6; ++Index)
+    {
+        UStaticMeshComponent* PlusPiece = CreateDefaultSubobject<UStaticMeshComponent>(
+            *FString::Printf(TEXT("HealingPlusPiece%d"), Index));
+        PlusPiece->SetupAttachment(RootComponent);
+        PlusPiece->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        PlusPiece->SetCastShadow(false);
+        PlusPiece->SetVisibility(false);
+        HealingEffectMeshes.Add(PlusPiece);
+    }
 }
 
 void ASharedHeroCharacter::BeginPlay()
@@ -56,6 +78,7 @@ void ASharedHeroCharacter::BeginPlay()
 
     EnsureVisibleMesh();
     ConfigureCamera();
+    ConfigureAbilityVisuals();
 
     AimRotation = FRotator(-10.0f, GetActorRotation().Yaw, 0.0f);
     OnRep_AimRotation();
@@ -121,6 +144,37 @@ void ASharedHeroCharacter::EnsureVisibleMesh()
 void ASharedHeroCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
+    AbilityVisualTime += DeltaSeconds;
+    if (bHealingActive && HealingEffectMeshes.Num() == 6)
+    {
+        const UGlobalGameData* Data = UGlobalGameData::Get(this);
+        const FVector Centers[] = { FVector(-42, 0, 5), FVector(38, 8, 28), FVector(0, -15, 62) };
+        APlayerCameraManager* Camera = GetWorld()->GetFirstPlayerController()
+            ? GetWorld()->GetFirstPlayerController()->PlayerCameraManager : nullptr;
+        for (int32 PlusIndex = 0; PlusIndex < 3; ++PlusIndex)
+        {
+            const float Phase = FMath::Fmod(AbilityVisualTime * 0.75f + PlusIndex / 3.0f, 1.0f);
+            const float FadeScale = FMath::Clamp((1.0f - Phase) * 2.5f, 0.0f, 1.0f);
+            const FVector LocalPosition = Data->HealingEffectOffset + Centers[PlusIndex]
+                + FVector::UpVector * Phase * 95.0f;
+            const float S = Data->HealingPlusSize / 100.0f * FadeScale;
+            for (int32 Piece = 0; Piece < 2; ++Piece)
+            {
+                UStaticMeshComponent* PlusPiece = HealingEffectMeshes[PlusIndex * 2 + Piece];
+                PlusPiece->SetRelativeLocation(LocalPosition);
+                PlusPiece->SetRelativeScale3D(Piece == 0
+                    ? FVector(S * 0.28f, S * 0.09f, S)
+                    : FVector(S, S * 0.09f, S * 0.28f));
+                if (Camera)
+                {
+                    const FVector Facing = Camera->GetCameraLocation() - PlusPiece->GetComponentLocation();
+                    const FRotator TargetRotation = FRotationMatrix::MakeFromY(Facing.GetSafeNormal()).Rotator();
+                    PlusPiece->SetWorldRotation(FMath::RInterpTo(
+                        PlusPiece->GetComponentRotation(), TargetRotation, DeltaSeconds, 8.0f));
+                }
+            }
+        }
+    }
     if (!HasAuthority() || bIsDead)
     {
         return;
@@ -130,10 +184,100 @@ void ASharedHeroCharacter::Tick(float DeltaSeconds)
     ProcessMovement();
     ProcessActions();
 
+    if (bHealingActive)
+    {
+        const UGlobalGameData* Data = UGlobalGameData::Get(this);
+        Health = FMath::Min(Data->HeroMaxHealth, Health + Data->HealingPerSecond * DeltaSeconds);
+    }
+
     if (bIsFiring && GetWorld()->GetTimeSeconds() >= FiringVisualUntil)
     {
         bIsFiring = false;
     }
+}
+
+void ASharedHeroCharacter::SetParticipantAbility(int32 ParticipantIndex, bool bPressed)
+{
+    if (!HasAuthority() || ParticipantIndex < 0 || ParticipantIndex >= ParticipantCount || bIsDead)
+    {
+        return;
+    }
+    if (ParticipantIndex == 0) bHealingActive = bPressed;
+    if (ParticipantIndex == 1) bShieldActive = bPressed;
+    if (bPressed)
+    {
+        ParticipantActions[ParticipantIndex][static_cast<int32>(EConsensusAction::Fire)] = false;
+        RefreshActionMasks();
+    }
+    OnRep_AbilityState();
+    ForceNetUpdate();
+}
+
+void ASharedHeroCharacter::ConfigureAbilityVisuals()
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    if (UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")))
+    {
+        ShieldMesh->SetStaticMesh(Sphere);
+        ShieldMesh->SetRelativeScale3D(FVector(Data->ShieldRadius / 50.0f));
+    }
+    UMaterialInterface* Base = Data->ShieldMaterial.LoadSynchronous();
+    if (!Base)
+    {
+        Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_PlayerShield.M_PlayerShield"));
+    }
+    if (Base)
+    {
+        ShieldDynamicMaterial = UMaterialInstanceDynamic::Create(Base, this);
+        ShieldDynamicMaterial->SetVectorParameterValue(TEXT("EffectColor"), Data->ShieldColor);
+        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Intensity"), Data->ShieldEmissiveIntensity);
+        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), Data->ShieldColor.A);
+        ShieldMesh->SetMaterial(0, ShieldDynamicMaterial);
+    }
+    if (UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")))
+    {
+        const float S = Data->HealingPlusSize / 100.0f;
+        const FVector Centers[] = { FVector(-42, 0, 5), FVector(38, 8, 28), FVector(0, -15, 62) };
+        for (int32 PlusIndex = 0; PlusIndex < 3; ++PlusIndex)
+        {
+            UStaticMeshComponent* Vertical = HealingEffectMeshes[PlusIndex * 2];
+            UStaticMeshComponent* Horizontal = HealingEffectMeshes[PlusIndex * 2 + 1];
+            Vertical->SetStaticMesh(Cube);
+            Horizontal->SetStaticMesh(Cube);
+            Vertical->SetRelativeLocation(Data->HealingEffectOffset + Centers[PlusIndex]);
+            Horizontal->SetRelativeLocation(Data->HealingEffectOffset + Centers[PlusIndex]);
+            Vertical->SetRelativeScale3D(FVector(S * 0.28f, S * 0.09f, S));
+            Horizontal->SetRelativeScale3D(FVector(S, S * 0.09f, S * 0.28f));
+        }
+    }
+    UMaterialInterface* HealingBase = Data->HealingEffectMaterial.LoadSynchronous();
+    if (!HealingBase)
+    {
+        HealingBase = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_HealingPlus.M_HealingPlus"));
+    }
+    if (HealingBase)
+    {
+        HealingDynamicMaterial = UMaterialInstanceDynamic::Create(HealingBase, this);
+        HealingDynamicMaterial->SetVectorParameterValue(TEXT("EffectColor"), Data->HealingEffectColor);
+        HealingDynamicMaterial->SetScalarParameterValue(TEXT("Intensity"), Data->HealingEffectIntensity);
+        HealingDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
+        for (UStaticMeshComponent* PlusPiece : HealingEffectMeshes)
+        {
+            PlusPiece->SetMaterial(0, HealingDynamicMaterial);
+        }
+    }
+    OnRep_AbilityState();
+}
+
+void ASharedHeroCharacter::OnRep_AbilityState()
+{
+    for (UStaticMeshComponent* PlusPiece : HealingEffectMeshes)
+    {
+        PlusPiece->SetVisibility(bHealingActive, true);
+    }
+    ShieldMesh->SetVisibility(bShieldActive, true);
+    BP_OnHealingStateChanged(bHealingActive);
+    BP_OnShieldStateChanged(bShieldActive);
 }
 
 bool ASharedHeroCharacter::HasConsensus(EConsensusAction Action) const
@@ -241,6 +385,9 @@ void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
     }
     bLookPending[ParticipantIndex] = false;
     LookActiveUntil[ParticipantIndex] = 0.0;
+    if (ParticipantIndex == 0) bHealingActive = false;
+    if (ParticipantIndex == 1) bShieldActive = false;
+    OnRep_AbilityState();
     RefreshActionMasks();
 }
 
@@ -336,7 +483,8 @@ void ASharedHeroCharacter::ProcessActions()
     }
     bWasJumpConsensus = bJumpConsensus;
 
-    if (HasConsensus(EConsensusAction::Fire) && GetWorld()->GetTimeSeconds() >= NextFireTime)
+    if (!bHealingActive && !bShieldActive && HasConsensus(EConsensusAction::Fire)
+        && GetWorld()->GetTimeSeconds() >= NextFireTime)
     {
         FireGun();
     }
@@ -417,7 +565,7 @@ void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQua
 float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
     AController* EventInstigator, AActor* DamageCauser)
 {
-    if (!HasAuthority() || bIsDead)
+    if (!HasAuthority() || bIsDead || bShieldActive)
     {
         return 0.0f;
     }
@@ -506,6 +654,8 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, Health);
     DOREPLIFETIME(ASharedHeroCharacter, bIsFiring);
     DOREPLIFETIME(ASharedHeroCharacter, bIsDead);
+    DOREPLIFETIME(ASharedHeroCharacter, bHealingActive);
+    DOREPLIFETIME(ASharedHeroCharacter, bShieldActive);
     DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerOneActionMask);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoActionMask);
