@@ -1,0 +1,38 @@
+; Copy this file to Config/EOS.ini. Never commit EOS.ini because it contains credentials.
+; Values come from Epic Developer Portal > Product Settings > SDK Credentials.
+
+[OnlineSubsystem]
+DefaultPlatformService=EOS
+NativePlatformService=EOS
+
+[OnlineSubsystemEOS]
+bEnabled=true
+
+[/Script/OnlineSubsystemEOS.EOSSettings]
+CacheDir=EOSCache
+DefaultArtifactName=Razigra
+TickBudgetInMilliseconds=0
+bEnableOverlay=true
+bEnableSocialOverlay=true
+bEnableEditorOverlay=true
+bPreferPersistentAuth=false
+bUseEAS=true
+bUseEOSConnect=true
+bUseEOSRTC=false
+Artifacts=(ArtifactName="Razigra",ClientId="REPLACE_ME",ClientSecret="REPLACE_ME",ProductId="REPLACE_ME",SandboxId="REPLACE_ME",DeploymentId="REPLACE_ME",ClientEncryptionKey="REPLACE_WITH_64_HEX_CHARACTERS")
+
+[/Script/Engine.GameEngine]
+NetDriverDefinitions=(DefName="GameNetDriver",DriverClassName="/Script/OnlineSubsystemEOS.NetDriverEOS",DriverClassNameFallback="/Script/OnlineSubsystemUtils.IpNetDriver")
+
+[/Script/OnlineSubsystemEOS.NetDriverEOS]
+bIsUsingP2PSockets=true
+NetConnectionClassName="/Script/OnlineSubsystemEOS.NetConnectionEOS"
+
+; accountportal opens the EOS account portal. For local Dev Auth Tool testing use:
+; LoginCredentialType=developer
+; LoginId=localhost:6300
+; LoginToken=PlayerOne
+[GamejamRazigra.EOS]
+LoginCredentialType=accountportal
+LoginId=
+LoginToken=
