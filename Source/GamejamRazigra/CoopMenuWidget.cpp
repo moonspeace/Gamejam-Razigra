@@ -42,12 +42,14 @@ void UCoopMenuWidget::NativeOnInitialized()
     UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MenuLayout"));
     Column->SetContent(Layout);
 
-    UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
-    Title->SetText(FText::FromString(TEXT("ZOMBIE ZERO")));
-    Title->SetColorAndOpacity(FSlateColor(TitleColor));
-    Title->SetJustification(ETextJustify::Center);
-    Title->SetFont(UGlobalGameData::Get(this)->MenuTitleFont);
-    if (UVerticalBoxSlot* TitleSlot = Layout->AddChildToVerticalBox(Title))
+    TitleText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
+    TitleText->SetText(FText::FromString(TEXT("ZOMBIE ZERO")));
+    TitleText->SetColorAndOpacity(FSlateColor(TitleColor));
+    TitleText->SetJustification(ETextJustify::Center);
+    TitleText->SetFont(UGlobalGameData::Get(this)->MenuTitleFont);
+    TitleText->SetShadowOffset(FVector2D(3.0f, 3.0f));
+    TitleText->SetShadowColorAndOpacity(FLinearColor(0.25f, 0.0f, 0.0f, 0.8f));
+    if (UVerticalBoxSlot* TitleSlot = Layout->AddChildToVerticalBox(TitleText))
     {
         TitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 34.0f));
     }
@@ -55,6 +57,7 @@ void UCoopMenuWidget::NativeOnInitialized()
     HostButton = BuildButton(TEXT("Host"), TEXT("HOST"));
     JoinButton = BuildButton(TEXT("Join"), TEXT("JOIN"));
     SinglePlayerButton = BuildButton(TEXT("Solo"), TEXT("SOLO"));
+    MenuButtons = { HostButton, JoinButton, SinglePlayerButton };
     for (UButton* Button : { HostButton.Get(), JoinButton.Get(), SinglePlayerButton.Get() })
     {
         if (UVerticalBoxSlot* ButtonSlot = Layout->AddChildToVerticalBox(Button))
@@ -77,6 +80,12 @@ void UCoopMenuWidget::NativeOnInitialized()
     HostButton->OnClicked.AddDynamic(this, &ThisClass::HandleHostClicked);
     JoinButton->OnClicked.AddDynamic(this, &ThisClass::HandleJoinClicked);
     SinglePlayerButton->OnClicked.AddDynamic(this, &ThisClass::HandleSinglePlayerClicked);
+    HostButton->OnHovered.AddDynamic(this, &ThisClass::HandleHostHovered);
+    JoinButton->OnHovered.AddDynamic(this, &ThisClass::HandleJoinHovered);
+    SinglePlayerButton->OnHovered.AddDynamic(this, &ThisClass::HandleSoloHovered);
+    HostButton->OnUnhovered.AddDynamic(this, &ThisClass::HandleButtonUnhovered);
+    JoinButton->OnUnhovered.AddDynamic(this, &ThisClass::HandleButtonUnhovered);
+    SinglePlayerButton->OnUnhovered.AddDynamic(this, &ThisClass::HandleButtonUnhovered);
 }
 
 UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
@@ -86,6 +95,28 @@ UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
     Text->SetText(FText::FromString(Label));
     Text->SetJustification(ETextJustify::Center);
     Text->SetFont(UGlobalGameData::Get(this)->MenuButtonFont);
+    Text->SetColorAndOpacity(FSlateColor(FLinearColor(0.92f, 0.93f, 0.95f, 1.0f)));
+    Text->SetShadowOffset(FVector2D(1.0f, 2.0f));
+    Text->SetShadowColorAndOpacity(FLinearColor(0.0f, 0.0f, 0.0f, 0.85f));
+
+    FButtonStyle Style = Button->GetStyle();
+    const auto MakeBrush = [](const FLinearColor& Color, float OutlineAlpha)
+    {
+        FSlateBrush Brush;
+        Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+        Brush.TintColor = FSlateColor(Color);
+        Brush.OutlineSettings.CornerRadii = FVector4(7.0f);
+        Brush.OutlineSettings.Width = 1.5f;
+        Brush.OutlineSettings.Color = FSlateColor(FLinearColor(0.85f, 0.08f, 0.035f, OutlineAlpha));
+        return Brush;
+    };
+    Style.SetNormal(MakeBrush(FLinearColor(0.035f, 0.04f, 0.055f, 0.98f), 0.65f));
+    Style.SetHovered(MakeBrush(FLinearColor(0.16f, 0.025f, 0.02f, 1.0f), 1.0f));
+    Style.SetPressed(MakeBrush(FLinearColor(0.55f, 0.035f, 0.018f, 1.0f), 1.0f));
+    Style.SetDisabled(MakeBrush(FLinearColor(0.025f, 0.025f, 0.03f, 0.7f), 0.2f));
+    Style.NormalPadding = FMargin(18.0f, 13.0f);
+    Style.PressedPadding = FMargin(18.0f, 15.0f, 18.0f, 11.0f);
+    Button->SetStyle(Style);
     Button->SetContent(Text);
     return Button;
 }
@@ -93,11 +124,42 @@ UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
 void UCoopMenuWidget::NativeConstruct()
 {
     Super::NativeConstruct();
+    IntroElapsed = 0.0f;
+    SetRenderOpacity(0.0f);
     if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
     {
         Sessions->OnStatusChanged.AddUniqueDynamic(this, &ThisClass::HandleStatusChanged);
         ApplyLobbyMode();
         HandleStatusChanged(Sessions->GetLastStatus());
+    }
+}
+
+void UCoopMenuWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    IntroElapsed += InDeltaTime;
+    SetRenderOpacity(FMath::Clamp(IntroElapsed / 0.35f, 0.0f, 1.0f));
+
+    if (TitleText)
+    {
+        const float Pulse = 1.0f + FMath::Sin(IntroElapsed * 2.3f) * 0.018f;
+        TitleText->SetRenderScale(FVector2D(Pulse));
+        TitleText->SetRenderTranslation(FVector2D(0.0f, FMath::Lerp(-28.0f, 0.0f,
+            FMath::Clamp(IntroElapsed / 0.55f, 0.0f, 1.0f))));
+    }
+
+    for (int32 Index = 0; Index < MenuButtons.Num(); ++Index)
+    {
+        if (UButton* Button = MenuButtons[Index])
+        {
+            const float Reveal = FMath::Clamp((IntroElapsed - 0.12f * Index) / 0.42f, 0.0f, 1.0f);
+            const float Ease = 1.0f - FMath::Square(1.0f - Reveal);
+            Button->SetRenderOpacity(Reveal);
+            Button->SetRenderTranslation(FVector2D((1.0f - Ease) * 54.0f, 0.0f));
+            const float TargetScale = HoveredButtonIndex == Index ? 1.045f : 1.0f;
+            const FVector2D CurrentScale = Button->GetRenderTransform().Scale;
+            Button->SetRenderScale(FMath::Vector2DInterpTo(CurrentScale, FVector2D(TargetScale), InDeltaTime, 14.0f));
+        }
     }
 }
 
@@ -146,6 +208,11 @@ void UCoopMenuWidget::HandleSinglePlayerClicked()
 {
     GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>()->StartSinglePlayer();
 }
+
+void UCoopMenuWidget::HandleHostHovered() { HoveredButtonIndex = 0; }
+void UCoopMenuWidget::HandleJoinHovered() { HoveredButtonIndex = 1; }
+void UCoopMenuWidget::HandleSoloHovered() { HoveredButtonIndex = 2; }
+void UCoopMenuWidget::HandleButtonUnhovered() { HoveredButtonIndex = INDEX_NONE; }
 
 void UCoopMenuWidget::HandleStatusChanged(const FString& NewStatus)
 {

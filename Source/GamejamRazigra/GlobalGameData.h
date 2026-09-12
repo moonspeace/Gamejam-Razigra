@@ -12,6 +12,7 @@ class UCameraShakeBase;
 class UCoopHudWidget;
 class UCoopMenuWidget;
 class UFont;
+class UMaterialInterface;
 
 /**
  * The one gameplay-data object for Razigra. Create Blueprint children when a
@@ -56,6 +57,14 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(ClampMin="0"))
     float GameplayFadeInSeconds = 0.9f;
 
+    /** Camera boom offset. Used as socket offset normally, or relative offset when attached to a bone. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera")
+    FVector CameraOffset = FVector(0.0f, 55.0f, 70.0f);
+
+    /** Optional hero bone/socket for the camera boom. Leave None to retain root-mounted camera behavior. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera")
+    FName CameraAttachBoneName = NAME_None;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftObjectPtr<USkeletalMesh> ZombieMesh;
 
@@ -93,8 +102,9 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon", meta=(ClampMin="0.01"))
     float FireInterval = 0.2f;
 
+    /** Bone or socket where the cosmetic tracer and muzzle flash begin. The hit trace remains camera-based. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
-    FName MuzzleSocketName = TEXT("Muzzle");
+    FName VisualTraceOriginBoneName = TEXT("hand_r");
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Crosshair", meta=(ClampMin="1"))
     float CrosshairDotSize = 6.0f;
@@ -123,6 +133,19 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombiePathRefreshInterval = 0.35f;
+
+    /** Masked unlit material used for the red blink and dissolve death effect. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect")
+    TSoftObjectPtr<UMaterialInterface> ZombieDeathMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect", meta=(ClampMin="0"))
+    float ZombieDeathBlinkDuration = 0.45f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect", meta=(ClampMin="1"))
+    float ZombieDeathBlinkFrequency = 18.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect", meta=(ClampMin="0.05"))
+    float ZombieDeathDissolveDuration = 0.75f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network", meta=(ClampMin="1", ClampMax="2"))
     int32 RequiredPlayers = 2;

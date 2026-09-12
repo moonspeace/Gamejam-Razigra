@@ -18,6 +18,9 @@ ADamageNumberActor::ADamageNumberActor()
     DamageText->SetVerticalAlignment(EVerticalTextAligment::EVRTA_TextCenter);
     DamageText->SetCastShadow(false);
     DamageText->SetTranslucentSortPriority(100);
+    DamageText->bAlwaysRenderAsText = true;
+    DamageText->SetVisibility(true);
+    DamageText->SetHiddenInGame(false);
 }
 
 void ADamageNumberActor::InitializeDamageNumber(float DamageAmount, APlayerController* LocalController)
@@ -29,7 +32,7 @@ void ADamageNumberActor::InitializeDamageNumber(float DamageAmount, APlayerContr
     RiseSpeed = Data->DamageNumberRiseSpeed;
 
     DamageText->SetText(FText::AsNumber(FMath::RoundToInt(DamageAmount)));
-    DamageText->SetWorldSize(Data->DamageNumberWorldSize);
+    DamageText->SetWorldSize(FMath::Max(44.0f, Data->DamageNumberWorldSize));
     DamageText->SetTextRenderColor(BaseColor.ToFColor(true));
     if (UFont* Font = Data->DamageNumberFont.LoadSynchronous())
     {

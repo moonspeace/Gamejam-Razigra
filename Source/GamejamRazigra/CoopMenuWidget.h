@@ -26,6 +26,7 @@ protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeConstruct() override;
     virtual void NativeDestruct() override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
 
 private:
     UPROPERTY()
@@ -40,6 +41,13 @@ private:
     UPROPERTY()
     TObjectPtr<UButton> SinglePlayerButton;
 
+    UPROPERTY()
+    TObjectPtr<UTextBlock> TitleText;
+
+    TArray<TObjectPtr<UButton>> MenuButtons;
+    float IntroElapsed = 0.0f;
+    int32 HoveredButtonIndex = INDEX_NONE;
+
     UButton* BuildButton(const FString& Tag, const FString& Label);
 
     /** Hides the launch buttons while the session is waiting for the other player. */
@@ -53,6 +61,15 @@ private:
 
     UFUNCTION()
     void HandleSinglePlayerClicked();
+
+    UFUNCTION()
+    void HandleHostHovered();
+    UFUNCTION()
+    void HandleJoinHovered();
+    UFUNCTION()
+    void HandleSoloHovered();
+    UFUNCTION()
+    void HandleButtonUnhovered();
 
     UFUNCTION()
     void HandleStatusChanged(const FString& NewStatus);
