@@ -60,7 +60,7 @@ private:
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
 
-    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText);
+    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width);
     UWidget* BuildKeySpacer(const FString& Tag);
     UWidget* BuildAxisMeters();
     UProgressBar* BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color);

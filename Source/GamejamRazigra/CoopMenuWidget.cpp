@@ -8,14 +8,11 @@
 #include "Components/VerticalBoxSlot.h"
 #include "EOSSessionSubsystem.h"
 #include "Engine/GameInstance.h"
+#include "GlobalGameData.h"
 #include "Blueprint/WidgetTree.h"
-#include "Styling/CoreStyle.h"
 
 UCoopMenuWidget::UCoopMenuWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
-    , TitleFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 46))
-    , ButtonFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 16))
-    , StatusFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 12))
     , BackdropColor(0.0f, 0.0f, 0.0f, 1.0f)
     , TitleColor(0.82f, 0.10f, 0.06f, 1.0f)
 {
@@ -49,7 +46,7 @@ void UCoopMenuWidget::NativeOnInitialized()
     Title->SetText(FText::FromString(TEXT("ZOMBIE ZERO")));
     Title->SetColorAndOpacity(FSlateColor(TitleColor));
     Title->SetJustification(ETextJustify::Center);
-    Title->SetFont(TitleFont);
+    Title->SetFont(UGlobalGameData::Get(this)->MenuTitleFont);
     if (UVerticalBoxSlot* TitleSlot = Layout->AddChildToVerticalBox(Title))
     {
         TitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 34.0f));
@@ -71,7 +68,7 @@ void UCoopMenuWidget::NativeOnInitialized()
     StatusText->SetJustification(ETextJustify::Center);
     StatusText->SetAutoWrapText(true);
     StatusText->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.58f, 0.62f, 1.0f)));
-    StatusText->SetFont(StatusFont);
+    StatusText->SetFont(UGlobalGameData::Get(this)->MenuStatusFont);
     if (UVerticalBoxSlot* StatusSlot = Layout->AddChildToVerticalBox(StatusText))
     {
         StatusSlot->SetPadding(FMargin(0.0f, 28.0f, 0.0f, 0.0f));
@@ -88,7 +85,7 @@ UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
     UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Label")));
     Text->SetText(FText::FromString(Label));
     Text->SetJustification(ETextJustify::Center);
-    Text->SetFont(ButtonFont);
+    Text->SetFont(UGlobalGameData::Get(this)->MenuButtonFont);
     Button->SetContent(Text);
     return Button;
 }

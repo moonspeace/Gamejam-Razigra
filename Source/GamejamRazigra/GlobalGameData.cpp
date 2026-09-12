@@ -5,6 +5,7 @@
 #include "SharedHeroCharacter.h"
 #include "ZombieCharacter.h"
 #include "GamejamRazigra.h"
+#include "Styling/CoreStyle.h"
 
 namespace RazigraData
 {
@@ -13,6 +14,11 @@ namespace RazigraData
 }
 
 UGlobalGameData::UGlobalGameData()
+    : MenuTitleFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 46))
+    , MenuButtonFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 16))
+    , MenuStatusFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 12))
+    , HudKeyFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 19))
+    , HudKeyLabelFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 12))
 {
     HeroBlueprint = TSoftClassPtr<ASharedHeroCharacter>(FSoftObjectPath(RazigraData::DefaultHeroBlueprintPath));
     ZombieClass = AZombieCharacter::StaticClass();

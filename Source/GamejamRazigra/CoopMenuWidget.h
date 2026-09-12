@@ -17,15 +17,6 @@ public:
     UCoopMenuWidget(const FObjectInitializer& ObjectInitializer);
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
-    FSlateFontInfo TitleFont;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
-    FSlateFontInfo ButtonFont;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
-    FSlateFontInfo StatusFont;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
     FLinearColor BackdropColor;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")

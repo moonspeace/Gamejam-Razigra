@@ -15,7 +15,6 @@
 #include "CoopPlayerController.h"
 #include "Engine/World.h"
 #include "GlobalGameData.h"
-#include "Styling/CoreStyle.h"
 
 namespace RazigraHud
 {
@@ -23,6 +22,8 @@ namespace RazigraHud
     static const FLinearColor MutedTextColor(0.58f, 0.62f, 0.68f, 1.0f);
     static const FLinearColor MeterBackgroundColor(0.04f, 0.05f, 0.07f, 0.55f);
     static constexpr float KeyWidth = 52.0f;
+    static constexpr float ActionKeyWidth = 78.0f;
+    static constexpr float SpaceKeyWidth = 112.0f;
     static constexpr float KeyHeight = 44.0f;
     static constexpr float KeyGap = 3.0f;
     static constexpr float MeterThickness = 10.0f;
@@ -59,8 +60,15 @@ void UCoopHudWidget::NativeOnInitialized()
         RowSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 34.0f));
     }
 
+    // Who am I, first thing on the left.
+    if (UHorizontalBoxSlot* LegendSlot = Row->AddChildToHorizontalBox(BuildLegend()))
+    {
+        LegendSlot->SetVerticalAlignment(VAlign_Center);
+        LegendSlot->SetPadding(FMargin(0.0f, 0.0f, 22.0f, 0.0f));
+    }
+
     // Two rows of key caps, positioned the way they sit on a keyboard:
-    //     [W]              [MOUSE]
+    //     [W]
     //  [A][S][D]     [CTRL][SPACE][LMB]
     UVerticalBox* Keyboard = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Keyboard"));
     if (UHorizontalBoxSlot* KeyboardSlot = Row->AddChildToHorizontalBox(Keyboard))
@@ -71,35 +79,27 @@ void UCoopHudWidget::NativeOnInitialized()
 
     UHorizontalBox* TopRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TopRow"));
     TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopLeft")));
-    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveForward, TEXT("W")));
+    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveForward, TEXT("W"), RazigraHud::KeyWidth));
     TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopRight")));
-    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopGap")));
-    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopMouseLeft")));
-    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Look, TEXT("MOUSE")));
     if (UVerticalBoxSlot* TopSlot = Keyboard->AddChildToVerticalBox(TopRow))
     {
         TopSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, RazigraHud::KeyGap * 2.0f));
     }
 
     UHorizontalBox* BottomRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("BottomRow"));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveLeft, TEXT("A")));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveBackward, TEXT("S")));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveRight, TEXT("D")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveLeft, TEXT("A"), RazigraHud::KeyWidth));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveBackward, TEXT("S"), RazigraHud::KeyWidth));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveRight, TEXT("D"), RazigraHud::KeyWidth));
     BottomRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadBottomGap")));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Crouch, TEXT("CTRL")));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Jump, TEXT("SPACE")));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Fire, TEXT("LMB")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Crouch, TEXT("CTRL"), RazigraHud::ActionKeyWidth));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Jump, TEXT("SPACE"), RazigraHud::SpaceKeyWidth));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Fire, TEXT("LMB"), RazigraHud::ActionKeyWidth));
     Keyboard->AddChildToVerticalBox(BottomRow);
 
+    // Aim is metered rather than lit: the bars replace the old mouse key cap.
     if (UHorizontalBoxSlot* MeterSlot = Row->AddChildToHorizontalBox(BuildAxisMeters()))
     {
         MeterSlot->SetVerticalAlignment(VAlign_Center);
-        MeterSlot->SetPadding(FMargin(0.0f, 0.0f, 18.0f, 0.0f));
-    }
-
-    if (UHorizontalBoxSlot* LegendSlot = Row->AddChildToHorizontalBox(BuildLegend()))
-    {
-        LegendSlot->SetVerticalAlignment(VAlign_Center);
     }
 }
 
@@ -112,12 +112,12 @@ UWidget* UCoopHudWidget::BuildKeySpacer(const FString& Tag)
     return Spacer;
 }
 
-UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString& KeyText)
+UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width)
 {
     const FString Tag = FString::Printf(TEXT("Card_%d"), static_cast<int32>(Action));
 
     USizeBox* CardBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *(Tag + TEXT("Box")));
-    CardBox->SetWidthOverride(RazigraHud::KeyWidth);
+    CardBox->SetWidthOverride(Width);
     CardBox->SetHeightOverride(RazigraHud::KeyHeight);
 
     UBorder* Card = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), *Tag);
@@ -127,19 +127,10 @@ UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString&
     Card->SetVerticalAlignment(VAlign_Center);
     CardBox->SetContent(Card);
 
-    int32 FontSize = 19;
-    if (KeyText.Len() > 3)
-    {
-        FontSize = 10;
-    }
-    else if (KeyText.Len() > 1)
-    {
-        FontSize = 13;
-    }
-
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
     UTextBlock* Key = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Key")));
     Key->SetText(FText::FromString(KeyText));
-    Key->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), FontSize));
+    Key->SetFont(KeyText.Len() > 1 ? Data->HudKeyLabelFont : Data->HudKeyFont);
     Key->SetJustification(ETextJustify::Center);
     Key->SetColorAndOpacity(FSlateColor(RazigraHud::MutedTextColor));
     Card->SetContent(Key);
@@ -236,7 +227,7 @@ UWidget* UCoopHudWidget::BuildLegend()
 
         UTextBlock* Digit = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Digit")));
         Digit->SetText(FText::AsNumber(Index + 1));
-        Digit->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 12));
+        Digit->SetFont(UGlobalGameData::Get(this)->HudKeyFont);
         Digit->SetJustification(ETextJustify::Center);
         Digit->SetColorAndOpacity(FSlateColor(RazigraHud::ActiveTextColor));
         Chip->SetContent(Digit);

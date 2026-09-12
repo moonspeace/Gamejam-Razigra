@@ -2,6 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Engine/DataAsset.h"
+#include "Fonts/SlateFontInfo.h"
 #include "GlobalGameData.generated.h"
 
 class ASharedHeroCharacter;
@@ -116,6 +117,24 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")
     FString SessionName = TEXT("Zombie Zero Two Player Co-op");
+
+    /** Every font the built-in menu and HUD draw with. Set a font asset here to restyle both. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
+    FSlateFontInfo MenuTitleFont;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
+    FSlateFontInfo MenuButtonFont;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
+    FSlateFontInfo MenuStatusFont;
+
+    /** Single-letter key caps (W, A, S, D) and the player number badges. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
+    FSlateFontInfo HudKeyFont;
+
+    /** Multi-letter key caps (CTRL, SPACE, LMB). */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
+    FSlateFontInfo HudKeyLabelFont;
 
     /**
      * When true the shared hero is not spawned until every required player has connected, so
