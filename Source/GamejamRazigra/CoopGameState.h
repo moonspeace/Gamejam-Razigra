@@ -17,9 +17,16 @@ public:
     UPROPERTY(ReplicatedUsing=OnRep_SharedHero, BlueprintReadOnly, Category="Razigra")
     TObjectPtr<ASharedHeroCharacter> SharedHero;
 
-    UPROPERTY(Replicated, BlueprintReadOnly, Category="Razigra")
+    UPROPERTY(ReplicatedUsing=OnRep_LobbyPopulation, BlueprintReadOnly, Category="Razigra")
     int32 ConnectedPlayerCount = 0;
+
+    UPROPERTY(ReplicatedUsing=OnRep_LobbyPopulation, BlueprintReadOnly, Category="Razigra")
+    int32 RequiredPlayerCount = 2;
 
     UFUNCTION()
     void OnRep_SharedHero();
+
+    /** Keeps a joining client's front end in step with the host's lobby. */
+    UFUNCTION()
+    void OnRep_LobbyPopulation();
 };

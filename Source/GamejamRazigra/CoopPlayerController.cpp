@@ -1,13 +1,53 @@
 #include "CoopPlayerController.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "CoopGameState.h"
+#include "CoopHudWidget.h"
+#include "EOSSessionSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "GlobalGameData.h"
 #include "Net/UnrealNetwork.h"
+#include "RazigraGameInstance.h"
 
 ACoopPlayerController::ACoopPlayerController()
 {
     bAutoManageActiveCameraTarget = false;
     PrimaryActorTick.bCanEverTick = true;
+}
+
+void ACoopPlayerController::BeginPlay()
+{
+    Super::BeginPlay();
+    if (IsLocalController())
+    {
+        // Nothing to look at until the shared hero exists, so sit on black rather than showing
+        // an empty level while the other player is still connecting.
+        HoldScreenBlack();
+    }
+}
+
+void ACoopPlayerController::HoldScreenBlack()
+{
+    if (PlayerCameraManager)
+    {
+        PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+    }
+}
+
+void ACoopPlayerController::FadeScreenIn()
+{
+    if (PlayerCameraManager)
+    {
+        PlayerCameraManager->StartCameraFade(1.0f, 0.0f,
+            UGlobalGameData::Get(this)->GameplayFadeInSeconds, FLinearColor::Black, false, false);
+    }
+}
+
+void ACoopPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    HideGameplayHud();
+    Super::EndPlay(EndPlayReason);
 }
 
 void ACoopPlayerController::PlayerTick(float DeltaTime)
@@ -78,6 +118,49 @@ void ACoopPlayerController::BindToSharedHero(ASharedHeroCharacter* Hero)
     SetViewTarget(Hero);
     bShowMouseCursor = false;
     SetInputMode(FInputModeGameOnly());
+
+    // The shared hero only exists once every player is in, so this is the moment the
+    // match actually starts: drop the front end and raise the in-game consensus HUD.
+    if (UGameInstance* Instance = GetGameInstance())
+    {
+        if (UEOSSessionSubsystem* Sessions = Instance->GetSubsystem<UEOSSessionSubsystem>())
+        {
+            Sessions->NotifyGameplayStarted();
+        }
+        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(Instance))
+        {
+            RazigraInstance->HideMainMenu();
+        }
+    }
+    ShowGameplayHud();
+    FadeScreenIn();
+}
+
+void ACoopPlayerController::ShowGameplayHud()
+{
+    if (GameplayHud || !IsLocalController())
+    {
+        return;
+    }
+    TSubclassOf<UCoopHudWidget> HudClass = UGlobalGameData::Get(this)->GameplayHudWidgetClass;
+    if (!HudClass)
+    {
+        HudClass = UCoopHudWidget::StaticClass();
+    }
+    GameplayHud = CreateWidget<UCoopHudWidget>(this, HudClass);
+    if (GameplayHud)
+    {
+        GameplayHud->AddToViewport(10);
+    }
+}
+
+void ACoopPlayerController::HideGameplayHud()
+{
+    if (GameplayHud)
+    {
+        GameplayHud->RemoveFromParent();
+        GameplayHud = nullptr;
+    }
 }
 
 void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCharacter* Hero)

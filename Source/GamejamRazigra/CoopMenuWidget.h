@@ -20,13 +20,16 @@ public:
     FSlateFontInfo TitleFont;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
-    FSlateFontInfo SubtitleFont;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
     FSlateFontInfo ButtonFont;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
     FSlateFontInfo StatusFont;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
+    FLinearColor BackdropColor;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|Menu Style")
+    FLinearColor TitleColor;
 
 protected:
     virtual void NativeOnInitialized() override;
@@ -46,7 +49,10 @@ private:
     UPROPERTY()
     TObjectPtr<UButton> SinglePlayerButton;
 
-    TArray<FString> StatusHistory;
+    UButton* BuildButton(const FString& Tag, const FString& Label);
+
+    /** Hides the launch buttons while the session is waiting for the other player. */
+    void ApplyLobbyMode();
 
     UFUNCTION()
     void HandleHostClicked();

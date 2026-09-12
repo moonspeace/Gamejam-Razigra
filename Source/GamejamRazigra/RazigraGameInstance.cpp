@@ -2,6 +2,7 @@
 
 #include "CoopMenuWidget.h"
 #include "EOSSessionSubsystem.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"

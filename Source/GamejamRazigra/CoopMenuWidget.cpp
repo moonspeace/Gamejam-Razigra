@@ -2,7 +2,7 @@
 
 #include "Components/Border.h"
 #include "Components/Button.h"
-#include "Components/Spacer.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
 #include "Components/VerticalBoxSlot.h"
@@ -13,10 +13,11 @@
 
 UCoopMenuWidget::UCoopMenuWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
-    , TitleFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 44))
-    , SubtitleFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 18))
-    , ButtonFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 18))
-    , StatusFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 14))
+    , TitleFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 46))
+    , ButtonFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), 16))
+    , StatusFont(FCoreStyle::GetDefaultFontStyle(TEXT("Regular"), 12))
+    , BackdropColor(0.0f, 0.0f, 0.0f, 1.0f)
+    , TitleColor(0.82f, 0.10f, 0.06f, 1.0f)
 {
 }
 
@@ -29,62 +30,67 @@ void UCoopMenuWidget::NativeOnInitialized()
         return;
     }
 
+    // Pitch black, edge to edge, with the whole menu centred inside it.
     UBorder* Backdrop = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("Backdrop"));
-    Backdrop->SetBrushColor(FLinearColor(0.015f, 0.02f, 0.025f, 0.96f));
-    Backdrop->SetPadding(FMargin(48.0f));
+    Backdrop->SetBrushColor(BackdropColor);
+    Backdrop->SetPadding(FMargin(0.0f));
+    Backdrop->SetHorizontalAlignment(HAlign_Center);
+    Backdrop->SetVerticalAlignment(VAlign_Center);
     WidgetTree->RootWidget = Backdrop;
 
+    USizeBox* Column = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("MenuColumn"));
+    Column->SetWidthOverride(360.0f);
+    Backdrop->SetContent(Column);
+
     UVerticalBox* Layout = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MenuLayout"));
-    Backdrop->SetContent(Layout);
+    Column->SetContent(Layout);
 
     UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Title"));
     Title->SetText(FText::FromString(TEXT("ZOMBIE ZERO")));
-    Title->SetColorAndOpacity(FSlateColor(FLinearColor(0.8f, 0.08f, 0.04f)));
+    Title->SetColorAndOpacity(FSlateColor(TitleColor));
     Title->SetJustification(ETextJustify::Center);
     Title->SetFont(TitleFont);
-    Layout->AddChildToVerticalBox(Title)->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 28.0f));
+    if (UVerticalBoxSlot* TitleSlot = Layout->AddChildToVerticalBox(Title))
+    {
+        TitleSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 34.0f));
+    }
 
-    UTextBlock* Subtitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Subtitle"));
-    Subtitle->SetText(FText::FromString(TEXT("TWO PLAYERS. ONE SURVIVOR.\nEvery action requires both players.")));
-    Subtitle->SetJustification(ETextJustify::Center);
-    Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-    Subtitle->SetFont(SubtitleFont);
-    Layout->AddChildToVerticalBox(Subtitle)->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 28.0f));
-
-    HostButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("HostButton"));
-    UTextBlock* HostLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HostLabel"));
-    HostLabel->SetText(FText::FromString(TEXT("HOST GAME")));
-    HostLabel->SetJustification(ETextJustify::Center);
-    HostLabel->SetFont(ButtonFont);
-    HostButton->SetContent(HostLabel);
-    Layout->AddChildToVerticalBox(HostButton)->SetPadding(FMargin(0.0f, 6.0f));
-
-    JoinButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("JoinButton"));
-    UTextBlock* JoinLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("JoinLabel"));
-    JoinLabel->SetText(FText::FromString(TEXT("FIND & JOIN GAME")));
-    JoinLabel->SetJustification(ETextJustify::Center);
-    JoinLabel->SetFont(ButtonFont);
-    JoinButton->SetContent(JoinLabel);
-    Layout->AddChildToVerticalBox(JoinButton)->SetPadding(FMargin(0.0f, 6.0f));
-
-    SinglePlayerButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("SinglePlayerButton"));
-    UTextBlock* SinglePlayerLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SinglePlayerLabel"));
-    SinglePlayerLabel->SetText(FText::FromString(TEXT("SINGLE PLAYER (TEST)")));
-    SinglePlayerLabel->SetJustification(ETextJustify::Center);
-    SinglePlayerLabel->SetFont(ButtonFont);
-    SinglePlayerButton->SetContent(SinglePlayerLabel);
-    Layout->AddChildToVerticalBox(SinglePlayerButton)->SetPadding(FMargin(0.0f, 6.0f));
+    HostButton = BuildButton(TEXT("Host"), TEXT("HOST"));
+    JoinButton = BuildButton(TEXT("Join"), TEXT("JOIN"));
+    SinglePlayerButton = BuildButton(TEXT("Solo"), TEXT("SOLO"));
+    for (UButton* Button : { HostButton.Get(), JoinButton.Get(), SinglePlayerButton.Get() })
+    {
+        if (UVerticalBoxSlot* ButtonSlot = Layout->AddChildToVerticalBox(Button))
+        {
+            ButtonSlot->SetPadding(FMargin(0.0f, 5.0f));
+        }
+    }
 
     StatusText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("StatusText"));
-    StatusText->SetText(FText::FromString(TEXT("Ready")));
+    StatusText->SetText(FText::GetEmpty());
     StatusText->SetJustification(ETextJustify::Center);
     StatusText->SetAutoWrapText(true);
+    StatusText->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f, 0.58f, 0.62f, 1.0f)));
     StatusText->SetFont(StatusFont);
-    Layout->AddChildToVerticalBox(StatusText)->SetPadding(FMargin(0.0f, 24.0f, 0.0f, 0.0f));
+    if (UVerticalBoxSlot* StatusSlot = Layout->AddChildToVerticalBox(StatusText))
+    {
+        StatusSlot->SetPadding(FMargin(0.0f, 28.0f, 0.0f, 0.0f));
+    }
 
     HostButton->OnClicked.AddDynamic(this, &ThisClass::HandleHostClicked);
     JoinButton->OnClicked.AddDynamic(this, &ThisClass::HandleJoinClicked);
     SinglePlayerButton->OnClicked.AddDynamic(this, &ThisClass::HandleSinglePlayerClicked);
+}
+
+UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
+{
+    UButton* Button = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), *(Tag + TEXT("Button")));
+    UTextBlock* Text = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Label")));
+    Text->SetText(FText::FromString(Label));
+    Text->SetJustification(ETextJustify::Center);
+    Text->SetFont(ButtonFont);
+    Button->SetContent(Text);
+    return Button;
 }
 
 void UCoopMenuWidget::NativeConstruct()
@@ -93,10 +99,27 @@ void UCoopMenuWidget::NativeConstruct()
     if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
     {
         Sessions->OnStatusChanged.AddUniqueDynamic(this, &ThisClass::HandleStatusChanged);
-        const FString InitialStatus = Sessions->GetLastStatus();
-        HandleStatusChanged(InitialStatus.IsEmpty()
-            ? FString::Printf(TEXT("Online service: %s"), *Sessions->GetOnlineSubsystemName())
-            : InitialStatus);
+        ApplyLobbyMode();
+        HandleStatusChanged(Sessions->GetLastStatus());
+    }
+}
+
+void UCoopMenuWidget::ApplyLobbyMode()
+{
+    const UEOSSessionSubsystem* Sessions = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    if (!Sessions || !Sessions->IsWaitingForPlayers())
+    {
+        return;
+    }
+
+    // Nothing left to click once the session is up: the status line carries the wait.
+    for (UButton* Button : { HostButton.Get(), JoinButton.Get(), SinglePlayerButton.Get() })
+    {
+        if (Button)
+        {
+            Button->SetVisibility(ESlateVisibility::Collapsed);
+        }
     }
 }
 
@@ -114,51 +137,34 @@ void UCoopMenuWidget::NativeDestruct()
 
 void UCoopMenuWidget::HandleHostClicked()
 {
-    HostButton->SetIsEnabled(false);
-    JoinButton->SetIsEnabled(false);
-    SinglePlayerButton->SetIsEnabled(false);
     GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>()->HostGame();
 }
 
 void UCoopMenuWidget::HandleJoinClicked()
 {
-    HostButton->SetIsEnabled(false);
-    JoinButton->SetIsEnabled(false);
-    SinglePlayerButton->SetIsEnabled(false);
     GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>()->FindAndJoinGame();
 }
 
 void UCoopMenuWidget::HandleSinglePlayerClicked()
 {
-    HostButton->SetIsEnabled(false);
-    JoinButton->SetIsEnabled(false);
-    SinglePlayerButton->SetIsEnabled(false);
     GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>()->StartSinglePlayer();
 }
 
 void UCoopMenuWidget::HandleStatusChanged(const FString& NewStatus)
 {
-    StatusHistory.Add(NewStatus);
-    constexpr int32 MaxStatusLines = 8;
-    if (StatusHistory.Num() > MaxStatusLines)
-    {
-        StatusHistory.RemoveAt(0, StatusHistory.Num() - MaxStatusLines);
-    }
+    // Only ever the latest line: the running log belongs in the output log, not on screen.
     if (StatusText)
     {
-        StatusText->SetText(FText::FromString(FString::Join(StatusHistory, TEXT("\n"))));
+        StatusText->SetText(FText::FromString(NewStatus));
     }
+    ApplyLobbyMode();
+
     const bool bBusy = NewStatus.Contains(TEXT("..."));
-    if (HostButton)
+    for (UButton* Button : { HostButton.Get(), JoinButton.Get(), SinglePlayerButton.Get() })
     {
-        HostButton->SetIsEnabled(!bBusy);
-    }
-    if (JoinButton)
-    {
-        JoinButton->SetIsEnabled(!bBusy);
-    }
-    if (SinglePlayerButton)
-    {
-        SinglePlayerButton->SetIsEnabled(!bBusy);
+        if (Button)
+        {
+            Button->SetIsEnabled(!bBusy);
+        }
     }
 }

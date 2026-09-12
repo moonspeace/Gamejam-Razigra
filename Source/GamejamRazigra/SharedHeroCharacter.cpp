@@ -4,6 +4,10 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "GamejamRazigra.h"
 #include "GlobalGameData.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -46,17 +50,43 @@ void ASharedHeroCharacter::BeginPlay()
     GetCharacterMovement()->MaxWalkSpeedCrouched = Data->CrouchedSpeed;
     GetCharacterMovement()->JumpZVelocity = Data->JumpVelocity;
 
-    if (USkeletalMesh* MeshAsset = Data->HeroMesh.LoadSynchronous())
-    {
-        GetMesh()->SetSkeletalMeshAsset(MeshAsset);
-    }
-    if (UClass* AnimationClass = Data->HeroAnimationClass.LoadSynchronous())
-    {
-        GetMesh()->SetAnimInstanceClass(AnimationClass);
-    }
+    EnsureVisibleMesh();
 
     AimRotation = FRotator(-10.0f, GetActorRotation().Yaw, 0.0f);
     OnRep_AimRotation();
+}
+
+/**
+ * The hero's mesh belongs to its Blueprint now. If the game is running on the bare C++ class
+ * (no Hero Blueprint configured yet) it would be completely invisible, so fall back to the
+ * sample mannequin and say so rather than dropping the player into an empty level.
+ */
+void ASharedHeroCharacter::EnsureVisibleMesh()
+{
+    USkeletalMeshComponent* MeshComponent = GetMesh();
+    if (!MeshComponent || MeshComponent->GetSkeletalMeshAsset())
+    {
+        return;
+    }
+
+    UE_LOG(LogRazigra, Warning,
+        TEXT("The shared hero has no mesh. Set GlobalGameData.HeroBlueprint to a hero Blueprint "
+             "(run the CreateRazigraData commandlet to generate /Game/Blueprints/BP_SharedHero). "
+             "Falling back to the sample mannequin."));
+
+    if (USkeletalMesh* FallbackMesh = LoadObject<USkeletalMesh>(nullptr,
+        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")))
+    {
+        MeshComponent->SetSkeletalMeshAsset(FallbackMesh);
+    }
+    if (!MeshComponent->GetAnimInstance())
+    {
+        if (UClass* FallbackAnimation = LoadClass<UAnimInstance>(nullptr,
+            TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed.ABP_Unarmed_C")))
+        {
+            MeshComponent->SetAnimInstanceClass(FallbackAnimation);
+        }
+    }
 }
 
 void ASharedHeroCharacter::Tick(float DeltaSeconds)
@@ -105,6 +135,53 @@ void ASharedHeroCharacter::SetParticipantAction(int32 ParticipantIndex, EConsens
         return;
     }
     ParticipantActions[ParticipantIndex][static_cast<int32>(Action)] = bPressed;
+    RefreshActionMasks();
+}
+
+void ASharedHeroCharacter::RefreshActionMasks()
+{
+    int32 Masks[ParticipantCount] = {};
+    for (int32 Participant = 0; Participant < ParticipantCount; ++Participant)
+    {
+        for (int32 ActionIndex = 0; ActionIndex < ActionCount; ++ActionIndex)
+        {
+            if (ParticipantActions[Participant][ActionIndex])
+            {
+                Masks[Participant] |= 1 << ActionIndex;
+            }
+        }
+    }
+    PlayerOneActionMask = Masks[0];
+    PlayerTwoActionMask = Masks[1];
+}
+
+FVector2D ASharedHeroCharacter::GetParticipantLookAxis(int32 ParticipantIndex) const
+{
+    switch (ParticipantIndex)
+    {
+    case 0: return PlayerOneLookAxis;
+    case 1: return PlayerTwoLookAxis;
+    default: return FVector2D::ZeroVector;
+    }
+}
+
+int32 ASharedHeroCharacter::GetParticipantActionMask(int32 ParticipantIndex) const
+{
+    switch (ParticipantIndex)
+    {
+    case 0: return PlayerOneActionMask;
+    case 1: return PlayerTwoActionMask;
+    default: return 0;
+    }
+}
+
+bool ASharedHeroCharacter::IsActionPressedBy(int32 ParticipantIndex, EConsensusAction Action) const
+{
+    if (Action == EConsensusAction::MAX)
+    {
+        return false;
+    }
+    return (GetParticipantActionMask(ParticipantIndex) & (1 << static_cast<int32>(Action))) != 0;
 }
 
 void ASharedHeroCharacter::SubmitParticipantLook(int32 ParticipantIndex, const FVector2D& LookDelta)
@@ -113,9 +190,14 @@ void ASharedHeroCharacter::SubmitParticipantLook(int32 ParticipantIndex, const F
     {
         return;
     }
+    const double Now = GetWorld()->GetTimeSeconds();
     PendingLook[ParticipantIndex] = LookDelta.GetClampedToMaxSize(50.0f);
-    LookReceivedAt[ParticipantIndex] = GetWorld()->GetTimeSeconds();
+    LookReceivedAt[ParticipantIndex] = Now;
     bLookPending[ParticipantIndex] = true;
+    // Held a little longer than the consensus grace so the HUD light does not strobe while
+    // a player keeps the mouse moving.
+    LookActiveUntil[ParticipantIndex] = Now + FMath::Max(
+        UGlobalGameData::Get(this)->LookInputGraceSeconds, 0.15f);
 }
 
 void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
@@ -129,6 +211,8 @@ void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
         ParticipantActions[ParticipantIndex][ActionIndex] = false;
     }
     bLookPending[ParticipantIndex] = false;
+    LookActiveUntil[ParticipantIndex] = 0.0;
+    RefreshActionMasks();
 }
 
 void ASharedHeroCharacter::ProcessMovement()
@@ -163,6 +247,20 @@ void ASharedHeroCharacter::ProcessLook()
         }
     }
 
+    // Publish who is steering, and by how much, so the HUD can light the card and drive the
+    // axis meters. Both are cleared as soon as a player stops moving the mouse.
+    const int32 LookActionIndex = static_cast<int32>(EConsensusAction::Look);
+    FVector2D LiveAxes[ParticipantCount] = {};
+    for (int32 Index = 0; Index < ParticipantCount; ++Index)
+    {
+        const bool bSteering = Now < LookActiveUntil[Index];
+        ParticipantActions[Index][LookActionIndex] = bSteering;
+        LiveAxes[Index] = bSteering ? PendingLook[Index] : FVector2D::ZeroVector;
+    }
+    PlayerOneLookAxis = LiveAxes[0];
+    PlayerTwoLookAxis = LiveAxes[1];
+    RefreshActionMasks();
+
     bool bAllLookInputsReady = true;
     FVector2D Combined = FVector2D::ZeroVector;
     for (int32 Index = 0; Index < RequiredConsensusParticipants; ++Index)
@@ -173,7 +271,9 @@ void ASharedHeroCharacter::ProcessLook()
 
     if (bAllLookInputsReady)
     {
-        Combined *= Data->LookSensitivity / static_cast<float>(RequiredConsensusParticipants);
+        // Both deltas are summed, not averaged: aiming is the two players' contributions added
+        // together, so pulling in opposite directions cancels out.
+        Combined *= Data->LookSensitivity;
         AimRotation.Yaw = FRotator::NormalizeAxis(AimRotation.Yaw + Combined.X);
         AimRotation.Pitch = FMath::Clamp(AimRotation.Pitch - Combined.Y, -70.0f, 60.0f);
         for (int32 Index = 0; Index < RequiredConsensusParticipants; ++Index)
@@ -227,19 +327,34 @@ void ASharedHeroCharacter::FireGun()
     FCollisionQueryParams Params(SCENE_QUERY_STAT(RazigraGun), true, this);
     const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
     const FVector FinalEnd = bHit ? Hit.ImpactPoint : TraceEnd;
+    AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
 
-    if (bHit && IsValid(Hit.GetActor()))
+    if (IsValid(HitActor))
     {
-        UGameplayStatics::ApplyPointDamage(Hit.GetActor(), Data->FireDamage, AimRotation.Vector(), Hit,
+        UGameplayStatics::ApplyPointDamage(HitActor, Data->FireDamage, AimRotation.Vector(), Hit,
             nullptr, this, UDamageType::StaticClass());
     }
-    MulticastGunFired(TraceStart, FinalEnd, bHit);
+    // Effects hang off the muzzle, not the camera, so a Blueprint child can attach them to the mesh.
+    MulticastGunFired(GetMuzzleLocation(), FinalEnd, bHit, HitActor);
 }
 
-void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQuantize& TraceStart,
-    const FVector_NetQuantize& TraceEnd, bool bHit)
+FVector ASharedHeroCharacter::GetMuzzleLocation() const
 {
-    BP_OnGunFired(TraceStart, TraceEnd, bHit);
+    const FName MuzzleSocket = UGlobalGameData::Get(this)->MuzzleSocketName;
+    if (const USkeletalMeshComponent* MeshComponent = GetMesh())
+    {
+        if (!MuzzleSocket.IsNone() && MeshComponent->DoesSocketExist(MuzzleSocket))
+        {
+            return MeshComponent->GetSocketLocation(MuzzleSocket);
+        }
+    }
+    return FollowCamera ? FollowCamera->GetComponentLocation() : GetActorLocation();
+}
+
+void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQuantize& MuzzleLocation,
+    const FVector_NetQuantize& ImpactPoint, bool bHit, AActor* HitActor)
+{
+    BP_OnGunFired(MuzzleLocation, ImpactPoint, bHit, HitActor);
 }
 
 float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
@@ -298,4 +413,9 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, Health);
     DOREPLIFETIME(ASharedHeroCharacter, bIsFiring);
     DOREPLIFETIME(ASharedHeroCharacter, bIsDead);
+    DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerOneActionMask);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoActionMask);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerOneLookAxis);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoLookAxis);
 }

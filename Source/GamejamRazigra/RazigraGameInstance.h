@@ -29,4 +29,5 @@ private:
     TObjectPtr<UCoopMenuWidget> MainMenuWidget;
 
     FTimerHandle ShowMenuRetryTimer;
+
 };

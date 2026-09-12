@@ -1,5 +1,8 @@
 #include "ZombieSpawner.h"
 
+#include "Components/ArrowComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/SphereComponent.h"
 #include "Engine/World.h"
 #include "NavigationSystem.h"
 #include "Net/UnrealNetwork.h"
@@ -11,6 +14,39 @@ AZombieSpawner::AZombieSpawner()
     PrimaryActorTick.bCanEverTick = false;
     bReplicates = true;
     ZombieClass = AZombieCharacter::StaticClass();
+
+    // Without a root component the actor has no transform to place, and nothing to click on in
+    // the viewport. The sphere doubles as the spawn-radius preview.
+    SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+    SetRootComponent(SceneRoot);
+
+    SpawnArea = CreateDefaultSubobject<USphereComponent>(TEXT("SpawnArea"));
+    SpawnArea->SetupAttachment(SceneRoot);
+    SpawnArea->SetSphereRadius(SpawnRadius);
+    SpawnArea->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    SpawnArea->SetCollisionResponseToAllChannels(ECR_Ignore);
+    SpawnArea->SetGenerateOverlapEvents(false);
+    SpawnArea->SetHiddenInGame(true);
+    SpawnArea->ShapeColor = FColor(190, 60, 45);
+
+#if WITH_EDITORONLY_DATA
+    DirectionArrow = CreateEditorOnlyDefaultSubobject<UArrowComponent>(TEXT("DirectionArrow"));
+    if (DirectionArrow)
+    {
+        DirectionArrow->SetupAttachment(SceneRoot);
+        DirectionArrow->ArrowColor = FColor(190, 60, 45);
+        DirectionArrow->bIsScreenSizeScaled = true;
+    }
+#endif
+}
+
+void AZombieSpawner::OnConstruction(const FTransform& Transform)
+{
+    Super::OnConstruction(Transform);
+    if (SpawnArea)
+    {
+        SpawnArea->SetSphereRadius(FMath::Max(SpawnRadius, 1.0f), false);
+    }
 }
 
 void AZombieSpawner::BeginPlay()
@@ -59,11 +95,17 @@ void AZombieSpawner::SpawnZombieNow()
 
     FActorSpawnParameters Params;
     Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-    FVector SpawnLocation = GetActorLocation() + FVector(0.0f, 0.0f, 100.0f);
+
+    // Spawn where this actor was placed. A radius scatters them around it; zero pins them to it.
+    const FVector Origin = GetActorLocation();
+    FVector SpawnLocation = Origin + FVector(0.0f, 0.0f, 100.0f);
     FNavLocation NavLocation;
     if (UNavigationSystemV1* Navigation = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
     {
-        if (Navigation->GetRandomReachablePointInRadius(GetActorLocation(), SpawnRadius, NavLocation))
+        const bool bFound = SpawnRadius > 0.0f
+            ? Navigation->GetRandomReachablePointInRadius(Origin, SpawnRadius, NavLocation)
+            : Navigation->ProjectPointToNavigation(Origin, NavLocation, FVector(0.0f, 0.0f, 200.0f));
+        if (bFound)
         {
             SpawnLocation = NavLocation.Location + FVector(0.0f, 0.0f, 100.0f);
         }

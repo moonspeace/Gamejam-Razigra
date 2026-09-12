@@ -43,11 +43,27 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Network")
     bool IsSinglePlayerMode() const { return bSinglePlayerMode; }
 
+    /** True between opening the lobby and every required player being connected. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Network")
+    bool IsWaitingForPlayers() const { return bWaitingForPlayer; }
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Network")
+    int32 GetConnectedPlayers() const { return ConnectedPlayers; }
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Network")
+    int32 GetExpectedPlayers() const { return ExpectedPlayers; }
+
     UFUNCTION(BlueprintPure, Category="Zombie Zero|Network")
     FString GetLastStatus() const { return LastStatus; }
 
     /** Called by the authoritative game mode as players enter or leave the session. */
-    void NotifyPlayerCountChanged(int32 ConnectedPlayers, int32 RequiredPlayers);
+    void NotifyPlayerCountChanged(int32 InConnectedPlayers, int32 InRequiredPlayers);
+
+    /** Called by a client's game state when the replicated lobby population changes. */
+    void ReportLobbyPopulation(int32 InConnectedPlayers, int32 InRequiredPlayers);
+
+    /** Called once the shared hero exists on this machine, i.e. the match is really running. */
+    void NotifyGameplayStarted();
 
     UPROPERTY(BlueprintAssignable, Category="Razigra|Network")
     FRazigraSessionStatus OnStatusChanged;
@@ -71,6 +87,8 @@ private:
     bool bMainMenuRequired = true;
     bool bSinglePlayerMode = false;
     bool bWaitingForPlayer = false;
+    int32 ConnectedPlayers = 0;
+    int32 ExpectedPlayers = 2;
 
     void LoadExternalEOSConfig();
     IOnlineSubsystem* GetOnlineSubsystem() const;
@@ -80,6 +98,8 @@ private:
     void CreateSession();
     void BroadcastStatus(const FString& Status);
     void BeginGameplayTravel(bool bSinglePlayer, bool bHideMenu = true);
+    void TravelToGameplayMap();
+    FString GetGameplayMapName() const;
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType,
         const FString& Error);
     void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType, const FString& Error);

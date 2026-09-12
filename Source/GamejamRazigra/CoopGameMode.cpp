@@ -27,9 +27,32 @@ void ACoopGameMode::StartPlay()
     }
 }
 
+int32 ACoopGameMode::GetRequiredPlayers() const
+{
+    const UGameInstance* Instance = GetGameInstance();
+    const UEOSSessionSubsystem* Sessions = Instance ? Instance->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    if (Sessions && Sessions->IsSinglePlayerMode())
+    {
+        return 1;
+    }
+    return FMath::Max(1, UGlobalGameData::Get(this)->RequiredPlayers);
+}
+
+/**
+ * The listen map is opened as soon as the session exists, so being here does not mean the game
+ * has started. The hero is held back until every player has actually connected; that wait is
+ * purely server-side bookkeeping and never touches travel or the net connection.
+ */
 bool ACoopGameMode::CanStartGameplay() const
 {
     if (!GetWorld())
+    {
+        return false;
+    }
+    // AGameModeBase::GetNumPlayers() is not const, and AssignedSlots is the same population
+    // counted the same way on every net mode, so use it for the gate everywhere.
+    const bool bEveryoneConnected = AssignedSlots.Num() >= GetRequiredPlayers();
+    if (UGlobalGameData::Get(this)->bWaitForAllPlayersBeforeStart && !bEveryoneConnected)
     {
         return false;
     }
@@ -61,12 +84,10 @@ void ACoopGameMode::EnsureSharedHero()
 
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     UE_LOG(LogRazigra, Log, TEXT("Spawning shared hero at %s."), *SpawnLocation.ToCompactString());
-    State->SharedHero = GetWorld()->SpawnActor<ASharedHeroCharacter>(Data->HeroClass, SpawnLocation, SpawnRotation);
+    State->SharedHero = GetWorld()->SpawnActor<ASharedHeroCharacter>(Data->GetHeroClass(), SpawnLocation, SpawnRotation);
     if (State->SharedHero)
     {
-        const UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>();
-        State->SharedHero->SetRequiredConsensusParticipants(
-            Sessions && Sessions->IsSinglePlayerMode() ? 1 : Data->RequiredPlayers);
+        State->SharedHero->SetRequiredConsensusParticipants(GetRequiredPlayers());
         BP_OnSharedHeroSpawned(State->SharedHero);
         for (const TPair<TWeakObjectPtr<ACoopPlayerController>, int32>& Pair : AssignedSlots)
         {
@@ -154,7 +175,7 @@ void ACoopGameMode::PreLogin(const FString& Options, const FString& Address,
     const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage)
 {
     Super::PreLogin(Options, Address, UniqueId, ErrorMessage);
-    if (ErrorMessage.IsEmpty() && GetNumPlayers() >= UGlobalGameData::Get(this)->RequiredPlayers)
+    if (ErrorMessage.IsEmpty() && GetNumPlayers() >= GetRequiredPlayers())
     {
         ErrorMessage = TEXT("Server is full (this game requires exactly two players).");
     }
@@ -179,13 +200,17 @@ int32 ACoopGameMode::AllocateSlot() const
 
 void ACoopGameMode::RefreshConnectedCount()
 {
+    const int32 Required = GetRequiredPlayers();
     if (ACoopGameState* State = GetGameState<ACoopGameState>())
     {
         State->ConnectedPlayerCount = AssignedSlots.Num();
-        if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
+        State->RequiredPlayerCount = Required;
+    }
+    if (UGameInstance* Instance = GetGameInstance())
+    {
+        if (UEOSSessionSubsystem* Sessions = Instance->GetSubsystem<UEOSSessionSubsystem>())
         {
-            Sessions->NotifyPlayerCountChanged(State->ConnectedPlayerCount,
-                UGlobalGameData::Get(this)->RequiredPlayers);
+            Sessions->NotifyPlayerCountChanged(AssignedSlots.Num(), Required);
         }
     }
 }
