@@ -1,11 +1,13 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Engine/EngineBaseTypes.h"
 #include "Interfaces/OnlineSessionInterface.h"
 #include "Subsystems/GameInstanceSubsystem.h"
 #include "EOSSessionSubsystem.generated.h"
 
 class IOnlineSubsystem;
+class UNetDriver;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FRazigraSessionStatus, const FString&, Status);
 
@@ -41,6 +43,12 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Network")
     bool IsSinglePlayerMode() const { return bSinglePlayerMode; }
 
+    UFUNCTION(BlueprintPure, Category="Zombie Zero|Network")
+    FString GetLastStatus() const { return LastStatus; }
+
+    /** Called by the authoritative game mode as players enter or leave the session. */
+    void NotifyPlayerCountChanged(int32 ConnectedPlayers, int32 RequiredPlayers);
+
     UPROPERTY(BlueprintAssignable, Category="Razigra|Network")
     FRazigraSessionStatus OnStatusChanged;
 
@@ -54,11 +62,15 @@ private:
     FDelegateHandle DestroyHandle;
     FDelegateHandle FindHandle;
     FDelegateHandle JoinHandle;
+    FDelegateHandle NetworkFailureHandle;
+    FDelegateHandle TravelFailureHandle;
     FString LoginCredentialType;
     FString LoginId;
     FString LoginToken;
+    FString LastStatus;
     bool bMainMenuRequired = true;
     bool bSinglePlayerMode = false;
+    bool bWaitingForPlayer = false;
 
     void LoadExternalEOSConfig();
     IOnlineSubsystem* GetOnlineSubsystem() const;
@@ -67,7 +79,10 @@ private:
     void ContinuePendingOperation();
     void CreateSession();
     void BroadcastStatus(const FString& Status);
-    void BeginGameplayTravel(bool bSinglePlayer);
+    void BeginGameplayTravel(bool bSinglePlayer, bool bHideMenu = true);
+    void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType,
+        const FString& Error);
+    void HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType, const FString& Error);
 
     void HandleLoginComplete(int32 LocalUserNum, bool bWasSuccessful,
         const FUniqueNetId& UserId, const FString& Error);

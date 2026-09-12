@@ -46,6 +46,8 @@ private:
     UPROPERTY()
     TObjectPtr<UButton> SinglePlayerButton;
 
+    TArray<FString> StatusHistory;
+
     UFUNCTION()
     void HandleHostClicked();
 

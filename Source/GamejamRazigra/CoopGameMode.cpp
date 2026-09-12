@@ -182,5 +182,10 @@ void ACoopGameMode::RefreshConnectedCount()
     if (ACoopGameState* State = GetGameState<ACoopGameState>())
     {
         State->ConnectedPlayerCount = AssignedSlots.Num();
+        if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
+        {
+            Sessions->NotifyPlayerCountChanged(State->ConnectedPlayerCount,
+                UGlobalGameData::Get(this)->RequiredPlayers);
+        }
     }
 }

@@ -93,7 +93,10 @@ void UCoopMenuWidget::NativeConstruct()
     if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
     {
         Sessions->OnStatusChanged.AddUniqueDynamic(this, &ThisClass::HandleStatusChanged);
-        HandleStatusChanged(FString::Printf(TEXT("Online service: %s"), *Sessions->GetOnlineSubsystemName()));
+        const FString InitialStatus = Sessions->GetLastStatus();
+        HandleStatusChanged(InitialStatus.IsEmpty()
+            ? FString::Printf(TEXT("Online service: %s"), *Sessions->GetOnlineSubsystemName())
+            : InitialStatus);
     }
 }
 
@@ -135,9 +138,15 @@ void UCoopMenuWidget::HandleSinglePlayerClicked()
 
 void UCoopMenuWidget::HandleStatusChanged(const FString& NewStatus)
 {
+    StatusHistory.Add(NewStatus);
+    constexpr int32 MaxStatusLines = 8;
+    if (StatusHistory.Num() > MaxStatusLines)
+    {
+        StatusHistory.RemoveAt(0, StatusHistory.Num() - MaxStatusLines);
+    }
     if (StatusText)
     {
-        StatusText->SetText(FText::FromString(NewStatus));
+        StatusText->SetText(FText::FromString(FString::Join(StatusHistory, TEXT("\n"))));
     }
     const bool bBusy = NewStatus.Contains(TEXT("..."));
     if (HostButton)

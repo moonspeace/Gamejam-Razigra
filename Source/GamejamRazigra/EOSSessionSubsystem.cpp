@@ -27,10 +27,27 @@ void UEOSSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
     LoadExternalEOSConfig();
+    if (GEngine)
+    {
+        NetworkFailureHandle = GEngine->OnNetworkFailure().AddUObject(this, &ThisClass::HandleNetworkFailure);
+        TravelFailureHandle = GEngine->OnTravelFailure().AddUObject(this, &ThisClass::HandleTravelFailure);
+    }
+
+    const IOnlineSubsystem* Online = GetOnlineSubsystem();
+    const bool bHasIdentity = Online && Online->GetIdentityInterface().IsValid();
+    const bool bHasSessions = Online && Online->GetSessionInterface().IsValid();
+    BroadcastStatus(FString::Printf(TEXT("Online service: %s | Identity: %s | Sessions: %s"),
+        *GetOnlineSubsystemName(), bHasIdentity ? TEXT("ready") : TEXT("missing"),
+        bHasSessions ? TEXT("ready") : TEXT("missing")));
 }
 
 void UEOSSessionSubsystem::Deinitialize()
 {
+    if (GEngine)
+    {
+        GEngine->OnNetworkFailure().Remove(NetworkFailureHandle);
+        GEngine->OnTravelFailure().Remove(TravelFailureHandle);
+    }
     if (IOnlineSubsystem* Online = GetOnlineSubsystem())
     {
         if (IOnlineIdentityPtr Identity = Online->GetIdentityInterface())
@@ -71,6 +88,10 @@ void UEOSSessionSubsystem::LoadExternalEOSConfig()
     GConfig->GetString(TEXT("GamejamRazigra.EOS"), TEXT("LoginId"), LoginId, GEngineIni);
     GConfig->GetString(TEXT("GamejamRazigra.EOS"), TEXT("LoginToken"), LoginToken, GEngineIni);
     GetMutableDefault<UEOSSettings>()->ReloadConfig();
+    const UEOSSettings* EOSSettings = GetDefault<UEOSSettings>();
+    UE_LOG(LogRazigra, Log, TEXT("EOS settings refreshed: default artifact '%s', %d artifact(s), credential mode '%s'."),
+        *EOSSettings->DefaultArtifactName, EOSSettings->Artifacts.Num(),
+        LoginCredentialType.IsEmpty() ? TEXT("automatic") : *LoginCredentialType);
     // OnlineSubsystem selects its default before GameInstance subsystems initialize.
     // Rebuild that default now that the deliberately external credentials are in memory.
     IOnlineSubsystem::ReloadDefaultSubsystem();
@@ -113,8 +134,13 @@ FString UEOSSessionSubsystem::GetOnlineSubsystemName() const
 
 void UEOSSessionSubsystem::BroadcastStatus(const FString& Status)
 {
+    LastStatus = Status;
     UE_LOG(LogRazigra, Log, TEXT("Session: %s"), *Status);
     OnStatusChanged.Broadcast(Status);
+    if (GEngine)
+    {
+        GEngine->AddOnScreenDebugMessage(7070, 20.0f, FColor::Cyan, Status);
+    }
 }
 
 void UEOSSessionSubsystem::HostGame()
@@ -135,13 +161,16 @@ void UEOSSessionSubsystem::StartSinglePlayer()
     UGameplayStatics::OpenLevel(this, FName(*Map), true);
 }
 
-void UEOSSessionSubsystem::BeginGameplayTravel(bool bSinglePlayer)
+void UEOSSessionSubsystem::BeginGameplayTravel(bool bSinglePlayer, bool bHideMenu)
 {
     bMainMenuRequired = false;
     bSinglePlayerMode = bSinglePlayer;
-    if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
+    if (bHideMenu)
     {
-        RazigraInstance->HideMainMenu();
+        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
+        {
+            RazigraInstance->HideMainMenu();
+        }
     }
 }
 
@@ -155,6 +184,10 @@ void UEOSSessionSubsystem::LoginThen(EPendingOperation Operation)
     }
 
     PendingOperation = Operation;
+    UE_LOG(LogRazigra, Log, TEXT("Starting %s flow using subsystem %s; login status=%d."),
+        Operation == EPendingOperation::Host ? TEXT("host") : TEXT("join"),
+        *Online->GetSubsystemName().ToString(), static_cast<int32>(Online->GetIdentityInterface().IsValid()
+            ? Online->GetIdentityInterface()->GetLoginStatus(0) : ELoginStatus::NotLoggedIn));
     IOnlineIdentityPtr Identity = Online->GetIdentityInterface();
     if (!Identity.IsValid() || Online->GetSubsystemName() == TEXT("NULL") ||
         Identity->GetLoginStatus(0) == ELoginStatus::LoggedIn)
@@ -200,6 +233,9 @@ void UEOSSessionSubsystem::HandleLoginComplete(int32 LocalUserNum, bool bWasSucc
         PendingOperation = EPendingOperation::None;
         return;
     }
+    UE_LOG(LogRazigra, Log, TEXT("EOS login succeeded for local user %d (account %s)."),
+        LocalUserNum, *UserId.ToDebugString());
+    BroadcastStatus(TEXT("Epic sign-in successful."));
     ContinuePendingOperation();
 }
 
@@ -308,9 +344,12 @@ void UEOSSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool b
         return;
     }
 
-    BroadcastStatus(TEXT("Session created. Loading the game..."));
-    BeginGameplayTravel(false);
+    bWaitingForPlayer = true;
+    BroadcastStatus(TEXT("Session created. Waiting for another player... (1/2 connected)"));
+    BeginGameplayTravel(false, false);
     const FString Map = UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
+    UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; opening listen map %s while waiting for player 2."),
+        *SessionName.ToString(), *Map);
     GetWorld()->ServerTravel(Map + TEXT("?listen"));
 }
 
@@ -321,6 +360,9 @@ void UEOSSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
     {
         Sessions->ClearOnFindSessionsCompleteDelegate_Handle(FindHandle);
     }
+    const int32 ResultCount = SessionSearch.IsValid() ? SessionSearch->SearchResults.Num() : 0;
+    UE_LOG(LogRazigra, Log, TEXT("Session search completed: success=%s, results=%d."),
+        bWasSuccessful ? TEXT("true") : TEXT("false"), ResultCount);
     if (!bWasSuccessful || !SessionSearch.IsValid() || SessionSearch->SearchResults.IsEmpty())
     {
         BroadcastStatus(TEXT("No joinable Razigra session was found."));
@@ -339,6 +381,9 @@ void UEOSSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
         BroadcastStatus(TEXT("Search completed, but no compatible game was found."));
         return;
     }
+
+    UE_LOG(LogRazigra, Log, TEXT("Compatible session found: ping=%d ms, open public connections=%d."),
+        Match->PingInMs, Match->Session.NumOpenPublicConnections);
 
     JoinHandle = Sessions->AddOnJoinSessionCompleteDelegate_Handle(
         FOnJoinSessionCompleteDelegate::CreateUObject(this, &ThisClass::HandleJoinSessionComplete));
@@ -363,6 +408,8 @@ void UEOSSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinS
         return;
     }
 
+    UE_LOG(LogRazigra, Log, TEXT("JoinSession completed successfully for '%s'."), *SessionName.ToString());
+
     FString ConnectString;
     if (!Sessions->GetResolvedConnectString(SessionName, ConnectString))
     {
@@ -375,6 +422,44 @@ void UEOSSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinS
         BeginGameplayTravel(false);
         Controller->ClientTravel(ConnectString, TRAVEL_Absolute);
     }
+}
+
+void UEOSSessionSubsystem::NotifyPlayerCountChanged(int32 ConnectedPlayers, int32 RequiredPlayers)
+{
+    UE_LOG(LogRazigra, Log, TEXT("Connected player count changed: %d/%d (waiting=%s)."), ConnectedPlayers,
+        RequiredPlayers, bWaitingForPlayer ? TEXT("true") : TEXT("false"));
+    if (!bWaitingForPlayer)
+    {
+        return;
+    }
+
+    if (ConnectedPlayers >= RequiredPlayers)
+    {
+        bWaitingForPlayer = false;
+        BroadcastStatus(FString::Printf(TEXT("Player connected. Starting Zombie Zero... (%d/%d)"),
+            ConnectedPlayers, RequiredPlayers));
+        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
+        {
+            RazigraInstance->HideMainMenu();
+        }
+    }
+    else
+    {
+        BroadcastStatus(FString::Printf(TEXT("Waiting for another player... (%d/%d connected)"),
+            ConnectedPlayers, RequiredPlayers));
+    }
+}
+
+void UEOSSessionSubsystem::HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver,
+    ENetworkFailure::Type FailureType, const FString& Error)
+{
+    BroadcastStatus(FString::Printf(TEXT("Network failure [%d]: %s"), static_cast<int32>(FailureType), *Error));
+}
+
+void UEOSSessionSubsystem::HandleTravelFailure(UWorld* World, ETravelFailure::Type FailureType,
+    const FString& Error)
+{
+    BroadcastStatus(FString::Printf(TEXT("Travel failure [%d]: %s"), static_cast<int32>(FailureType), *Error));
 }
 
 void UEOSSessionSubsystem::CancelSearch()
