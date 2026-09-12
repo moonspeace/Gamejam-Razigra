@@ -5,7 +5,9 @@
 #include "DamageNumberActor.generated.h"
 
 class APlayerController;
-class UTextRenderComponent;
+class USceneComponent;
+class UTextBlock;
+class UWidgetComponent;
 
 /** Client-only world text spawned by a replicated zombie damage notification. */
 UCLASS(NotBlueprintable, Transient)
@@ -22,7 +24,13 @@ public:
 
 private:
     UPROPERTY(VisibleAnywhere)
-    TObjectPtr<UTextRenderComponent> DamageText;
+    TObjectPtr<USceneComponent> SceneRoot;
+
+    UPROPERTY(VisibleAnywhere)
+    TObjectPtr<UWidgetComponent> DamageWidget;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UTextBlock> DamageText;
 
     TWeakObjectPtr<APlayerController> ViewController;
     FLinearColor BaseColor = FLinearColor::White;

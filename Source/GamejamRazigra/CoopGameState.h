@@ -23,6 +23,11 @@ public:
     UPROPERTY(ReplicatedUsing=OnRep_LobbyPopulation, BlueprintReadOnly, Category="Razigra")
     int32 RequiredPlayerCount = 2;
 
+    UPROPERTY(Replicated, BlueprintReadOnly, Category="Zombie Zero|Score")
+    int32 ZombieKillCount = 0;
+
+    void AddZombieKill();
+
     UFUNCTION()
     void OnRep_SharedHero();
 

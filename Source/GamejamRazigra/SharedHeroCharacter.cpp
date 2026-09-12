@@ -8,7 +8,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "CoopPlayerController.h"
 #include "DamageNumberActor.h"
-#include "DrawDebugHelpers.h"
+#include "LaserTraceActor.h"
 #include "Engine/SkeletalMesh.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
@@ -394,9 +394,14 @@ void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQua
     const FVector_NetQuantize& ImpactPoint, bool bHit, AActor* HitActor)
 {
     BP_OnGunFired(MuzzleLocation, ImpactPoint, bHit, HitActor);
-    DrawDebugLine(GetWorld(), MuzzleLocation, ImpactPoint,
-        bHit ? FColor::Green : FColor::Orange, false, 0.10f, 0, 2.5f);
-    DrawDebugSphere(GetWorld(), MuzzleLocation, 7.0f, 8, FColor::Yellow, false, 0.08f, 0, 1.5f);
+    FActorSpawnParameters TraceParams;
+    TraceParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    TraceParams.ObjectFlags |= RF_Transient;
+    if (ALaserTraceActor* Laser = GetWorld()->SpawnActor<ALaserTraceActor>(
+        ALaserTraceActor::StaticClass(), FVector(MuzzleLocation), FRotator::ZeroRotator, TraceParams))
+    {
+        Laser->InitializeLaser(MuzzleLocation, ImpactPoint);
+    }
     for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
     {
         if (ACoopPlayerController* LocalController = Cast<ACoopPlayerController>(It->Get()))

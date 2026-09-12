@@ -6,6 +6,7 @@
 #include "CoopHudWidget.generated.h"
 
 class UBorder;
+class UButton;
 class UHorizontalBox;
 class UProgressBar;
 class USizeBox;
@@ -68,9 +69,6 @@ private:
     TObjectPtr<UProgressBar> HealthBar;
 
     UPROPERTY()
-    TObjectPtr<UTextBlock> HealthText;
-
-    UPROPERTY()
     TArray<TObjectPtr<UBorder>> DamageVignetteEdges;
 
     UPROPERTY()
@@ -79,13 +77,26 @@ private:
     UPROPERTY()
     TObjectPtr<USizeBox> CrosshairBox;
 
+    UPROPERTY()
+    TObjectPtr<UTextBlock> KillText;
+
+    UPROPERTY()
+    TObjectPtr<UTextBlock> SmashText;
+
+    UPROPERTY()
+    TObjectPtr<UBorder> GameOverOverlay;
+
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
     TArray<float> DamageVignetteWeights;
+    TArray<FLinearColor> MeterBaseColors;
     float DamageFeedbackRemaining = 0.0f;
     float DamageFeedbackStrength = 0.0f;
     float FireFeedbackRemaining = 0.0f;
     bool bLastShotHit = false;
+    bool bGameOverShown = false;
+    int32 DisplayedKillCount = 0;
+    float KillSmashRemaining = 0.0f;
 
     void BuildCombatIndicators(class UOverlay* Root);
     void BuildDamageVignette(class UOverlay* Root);
@@ -94,6 +105,9 @@ private:
     UWidget* BuildAxisMeters();
     UProgressBar* BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color);
     UWidget* BuildLegend();
+    void BuildScoreAndGameOver(class UOverlay* Root);
+    UFUNCTION()
+    void HandleRestartClicked();
     ASharedHeroCharacter* ResolveSharedHero() const;
     int32 ResolveLocalParticipantIndex() const;
 };

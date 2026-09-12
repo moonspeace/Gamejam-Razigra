@@ -103,9 +103,8 @@ UButton* UCoopMenuWidget::BuildButton(const FString& Tag, const FString& Label)
     const auto MakeBrush = [](const FLinearColor& Color, float OutlineAlpha)
     {
         FSlateBrush Brush;
-        Brush.DrawAs = ESlateBrushDrawType::RoundedBox;
+        Brush.DrawAs = ESlateBrushDrawType::Box;
         Brush.TintColor = FSlateColor(Color);
-        Brush.OutlineSettings.CornerRadii = FVector4(7.0f);
         Brush.OutlineSettings.Width = 1.5f;
         Brush.OutlineSettings.Color = FSlateColor(FLinearColor(0.85f, 0.08f, 0.035f, OutlineAlpha));
         return Brush;

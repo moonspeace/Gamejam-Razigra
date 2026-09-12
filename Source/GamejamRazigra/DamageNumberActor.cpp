@@ -1,7 +1,9 @@
 #include "DamageNumberActor.h"
 
 #include "Camera/PlayerCameraManager.h"
-#include "Components/TextRenderComponent.h"
+#include "Components/SceneComponent.h"
+#include "Components/TextBlock.h"
+#include "Components/WidgetComponent.h"
 #include "Engine/Font.h"
 #include "GameFramework/PlayerController.h"
 #include "GlobalGameData.h"
@@ -12,15 +14,18 @@ ADamageNumberActor::ADamageNumberActor()
     bReplicates = false;
     SetActorEnableCollision(false);
 
-    DamageText = CreateDefaultSubobject<UTextRenderComponent>(TEXT("DamageText"));
-    SetRootComponent(DamageText);
-    DamageText->SetHorizontalAlignment(EHorizTextAligment::EHTA_Center);
-    DamageText->SetVerticalAlignment(EVerticalTextAligment::EVRTA_TextCenter);
-    DamageText->SetCastShadow(false);
-    DamageText->SetTranslucentSortPriority(100);
-    DamageText->bAlwaysRenderAsText = true;
-    DamageText->SetVisibility(true);
-    DamageText->SetHiddenInGame(false);
+    SceneRoot = CreateDefaultSubobject<USceneComponent>(TEXT("SceneRoot"));
+    SetRootComponent(SceneRoot);
+    DamageWidget = CreateDefaultSubobject<UWidgetComponent>(TEXT("DamageWidget"));
+    DamageWidget->SetupAttachment(SceneRoot);
+    DamageWidget->SetWidgetSpace(EWidgetSpace::World);
+    DamageWidget->SetDrawSize(FVector2D(256.0f, 96.0f));
+    DamageWidget->SetDrawAtDesiredSize(false);
+    DamageWidget->SetPivot(FVector2D(0.5f, 0.5f));
+    DamageWidget->SetTwoSided(true);
+    DamageWidget->SetWorldScale3D(FVector(0.3f));
+    DamageWidget->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    DamageWidget->SetTranslucentSortPriority(1000);
 }
 
 void ADamageNumberActor::InitializeDamageNumber(float DamageAmount, APlayerController* LocalController)
@@ -31,13 +36,25 @@ void ADamageNumberActor::InitializeDamageNumber(float DamageAmount, APlayerContr
     Lifetime = FMath::Max(0.05f, Data->DamageNumberLifetime);
     RiseSpeed = Data->DamageNumberRiseSpeed;
 
+    DamageText = NewObject<UTextBlock>(this, TEXT("FloatingDamageText"));
     DamageText->SetText(FText::AsNumber(FMath::RoundToInt(DamageAmount)));
-    DamageText->SetWorldSize(FMath::Max(44.0f, Data->DamageNumberWorldSize));
-    DamageText->SetTextRenderColor(BaseColor.ToFColor(true));
+    DamageText->SetJustification(ETextJustify::Center);
+    DamageText->SetColorAndOpacity(FSlateColor(BaseColor));
+    DamageText->SetShadowOffset(FVector2D(2.0f, 2.0f));
+    DamageText->SetShadowColorAndOpacity(FLinearColor::Black);
+    FSlateFontInfo FontInfo;
+    FontInfo.Size = FMath::Max(24, FMath::RoundToInt(Data->DamageNumberWorldSize));
     if (UFont* Font = Data->DamageNumberFont.LoadSynchronous())
     {
-        DamageText->SetFont(Font);
+        FontInfo.FontObject = Font;
     }
+    DamageText->SetFont(FontInfo);
+    DamageWidget->SetSlateWidget(DamageText->TakeWidget());
+    FLinearColor GlowTint = BaseColor;
+    GlowTint.R *= 6.0f;
+    GlowTint.G *= 6.0f;
+    GlowTint.B *= 6.0f;
+    DamageWidget->SetTintColorAndOpacity(GlowTint);
     SetLifeSpan(Lifetime);
 }
 
@@ -57,5 +74,13 @@ void ADamageNumberActor::Tick(float DeltaSeconds)
 
     FLinearColor FadedColor = BaseColor;
     FadedColor.A *= 1.0f - FMath::Clamp(Elapsed / Lifetime, 0.0f, 1.0f);
-    DamageText->SetTextRenderColor(FadedColor.ToFColor(true));
+    if (DamageText)
+    {
+        DamageText->SetColorAndOpacity(FSlateColor(FadedColor));
+        FLinearColor GlowTint = FadedColor;
+        GlowTint.R *= 6.0f;
+        GlowTint.G *= 6.0f;
+        GlowTint.B *= 6.0f;
+        DamageWidget->SetTintColorAndOpacity(GlowTint);
+    }
 }
