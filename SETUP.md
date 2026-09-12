@@ -13,10 +13,10 @@ The C++ project, gameplay framework, local two-instance networking fallback, men
 1. In the [Epic Developer Portal](https://dev.epicgames.com/portal), create or select a product, sandbox, deployment, and client policy/client credentials.
 2. Enable Epic Account Services and EOS Connect for the product. For development, permit the client policy actions needed for authentication, presence, lobbies, and sessions.
 3. Configure the product's Epic Account Services application, allowed countries/permissions, and redirect URLs as required by Epic. Add both tester Epic accounts to the product organization or deployment access list.
-4. Copy `Config/EOS.ini.example` to `Config/EOS.ini` and replace all six `REPLACE_ME` values. `EncryptionKey` must be 64 hexadecimal characters. The real file is intentionally ignored by Git.
+4. Copy `Config/EOS.ini.example` to `Config/EOS.ini` on every machine, replace all six `REPLACE_ME` values, and use a 64-character hexadecimal `ClientEncryptionKey`. Transfer this local file privately; Git intentionally ignores it.
 5. The default login mode is `accountportal`. For EOS Dev Auth Tool, run it on port 6300, create two profiles, and change the three values under `[GamejamRazigra.EOS]` as shown in the example. Each client needs its own profile/token. Command-line `-AUTH_TYPE`, `-AUTH_LOGIN`, and `-AUTH_PASSWORD` can instead be used with `AutoLogin` by leaving `LoginCredentialType` blank.
 6. Package or launch two standalone clients. PIE is useful with `OnlineSubsystemNull`; EOS account portal/overlay testing is more reliable in Standalone or packaged builds.
-7. For a packaged build, keep `EOS.ini` external: copy it beside the staged project config files at `<PackagedRoot>/GamejamRazigra/Config/EOS.ini`. Do not put production client secrets in source control; use a client policy restricted to the minimum EOS actions.
+7. For a packaged build, copy `EOS.ini` beside the staged project config files at `<PackagedRoot>/GamejamRazigra/Config/EOS.ini`. EOS client credentials ship with game clients, so restrict the client policy to only the minimum actions the game needs.
 
 ## Editor/content hookup
 
