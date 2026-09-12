@@ -8,6 +8,7 @@
 #include "GameFramework/PlayerController.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
+#include "HAL/IConsoleManager.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Misc/ConfigCacheIni.h"
 #include "Misc/PackageName.h"
@@ -29,6 +30,22 @@ void UEOSSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
     LoadExternalEOSConfig();
+
+#if WITH_EDITOR
+    // PIE disables seamless travel by default. Without it, the lobby's travel to the gameplay
+    // map is a hard travel that drops every connected client, so force it on in the editor.
+    if (IConsoleVariable* AllowPIESeamlessTravel =
+        IConsoleManager::Get().FindConsoleVariable(TEXT("net.AllowPIESeamlessTravel")))
+    {
+        if (AllowPIESeamlessTravel->GetInt() == 0)
+        {
+            AllowPIESeamlessTravel->Set(TEXT("1"), ECVF_SetByCode);
+            UE_LOG(LogRazigra, Log,
+                TEXT("Enabled net.AllowPIESeamlessTravel so PIE clients survive the travel out of the lobby."));
+        }
+    }
+#endif
+
     if (GEngine)
     {
         NetworkFailureHandle = GEngine->OnNetworkFailure().AddUObject(this, &ThisClass::HandleNetworkFailure);
@@ -405,10 +422,24 @@ void UEOSSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool b
         return;
     }
 
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
     bWaitingForPlayer = true;
     bSinglePlayerMode = false;
-    ExpectedPlayers = UGlobalGameData::Get(this)->RequiredPlayers;
+    ExpectedPlayers = Data->RequiredPlayers;
     ConnectedPlayers = FMath::Max(1, ConnectedPlayers);
+
+    if (!Data->bWaitForAllPlayersBeforeTravel)
+    {
+        // Fallback flow: open the gameplay map straight away and let the other player join
+        // into it. The menu stays up over the level until everybody has arrived.
+        UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; opening the gameplay map immediately."),
+            *SessionName.ToString());
+        BroadcastStatus(FString::Printf(TEXT("Session created. Waiting for players... (%d/%d connected)"),
+            ConnectedPlayers, ExpectedPlayers));
+        BeginGameplayTravel(false, false);
+        TravelToGameplayMap();
+        return;
+    }
 
     if (!StartListening())
     {
@@ -514,10 +545,14 @@ void UEOSSessionSubsystem::NotifyPlayerCountChanged(int32 InConnectedPlayers, in
     if (ConnectedPlayers >= ExpectedPlayers)
     {
         bWaitingForPlayer = false;
-        BroadcastStatus(FString::Printf(TEXT("All players connected (%d/%d). Loading the map..."),
+        BroadcastStatus(FString::Printf(TEXT("All players connected (%d/%d). Starting Zombie Zero..."),
             ConnectedPlayers, ExpectedPlayers));
+        const bool bNeedsTravel = UGlobalGameData::Get(this)->bWaitForAllPlayersBeforeTravel;
         BeginGameplayTravel(false);
-        TravelToGameplayMap();
+        if (bNeedsTravel)
+        {
+            TravelToGameplayMap();
+        }
     }
     else
     {

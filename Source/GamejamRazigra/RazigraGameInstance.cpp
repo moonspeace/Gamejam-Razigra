@@ -86,10 +86,8 @@ bool URazigraGameInstance::ShouldFrontEndBeVisible() const
     {
         return true;
     }
-    if (Sessions->IsOnGameplayMap())
-    {
-        return false;
-    }
+    // Either still in the front end, or in the waiting room. The waiting room stays up on the
+    // gameplay map too, until the shared hero replicates in and the match really starts.
     return Sessions->ShouldShowMainMenu() || Sessions->IsWaitingForPlayers();
 }
 

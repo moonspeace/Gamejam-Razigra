@@ -39,8 +39,10 @@ int32 ACoopGameMode::GetRequiredPlayers() const
 }
 
 /**
- * Gameplay only begins on the gameplay map, and only once every required player is
- * connected. Until then this game mode is just hosting the lobby.
+ * The player-count gate lives in the session subsystem, which holds the lobby until everyone
+ * is connected and only then travels here. By the time this returns true the wait is over, so
+ * it must not re-check the count: a player who drops during travel would otherwise leave the
+ * level permanently empty with no hero and no way to recover.
  */
 bool ACoopGameMode::CanStartGameplay() const
 {
@@ -48,8 +50,10 @@ bool ACoopGameMode::CanStartGameplay() const
     {
         return false;
     }
-    if (AssignedSlots.Num() < GetRequiredPlayers())
+    if (!GetWorld()->NextURL.IsEmpty())
     {
+        // A server travel is already queued this frame (the lobby just filled up). Spawning
+        // here would put the hero on the map we are about to leave.
         return false;
     }
     if (GetWorld()->GetNetMode() == NM_DedicatedServer)
@@ -62,7 +66,8 @@ bool ACoopGameMode::CanStartGameplay() const
     {
         return false;
     }
-    return !Sessions->ShouldShowMainMenu() && !Sessions->IsWaitingForPlayers() && Sessions->IsOnGameplayMap();
+    // Still in the front end, or still holding the lobby for the other player.
+    return !Sessions->ShouldShowMainMenu() && !Sessions->IsWaitingForPlayers();
 }
 
 void ACoopGameMode::EnsureSharedHero()

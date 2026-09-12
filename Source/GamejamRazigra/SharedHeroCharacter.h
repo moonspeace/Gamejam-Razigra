@@ -131,6 +131,7 @@ private:
     bool bIsDead = false;
 
     bool HasConsensus(EConsensusAction Action) const;
+    void EnsureVisibleMesh();
     void RefreshActionMasks();
     void ProcessMovement();
     void ProcessLook();

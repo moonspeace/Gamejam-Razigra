@@ -108,4 +108,12 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")
     FString SessionName = TEXT("Zombie Zero Two Player Co-op");
+
+    /**
+     * When true the host waits in the front end until every player has joined and only then
+     * travels everybody to GameplayMap. Turn it off to fall back to the older behaviour where
+     * the host opens the gameplay map immediately and the other player joins into it.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")
+    bool bWaitForAllPlayersBeforeTravel = true;
 };

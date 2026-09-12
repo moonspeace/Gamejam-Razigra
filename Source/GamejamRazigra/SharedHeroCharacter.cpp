@@ -4,6 +4,10 @@
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
+#include "Animation/AnimInstance.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "Engine/SkeletalMesh.h"
+#include "GamejamRazigra.h"
 #include "GlobalGameData.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
@@ -46,8 +50,43 @@ void ASharedHeroCharacter::BeginPlay()
     GetCharacterMovement()->MaxWalkSpeedCrouched = Data->CrouchedSpeed;
     GetCharacterMovement()->JumpZVelocity = Data->JumpVelocity;
 
+    EnsureVisibleMesh();
+
     AimRotation = FRotator(-10.0f, GetActorRotation().Yaw, 0.0f);
     OnRep_AimRotation();
+}
+
+/**
+ * The hero's mesh belongs to its Blueprint now. If the game is running on the bare C++ class
+ * (no Hero Blueprint configured yet) it would be completely invisible, so fall back to the
+ * sample mannequin and say so rather than dropping the player into an empty level.
+ */
+void ASharedHeroCharacter::EnsureVisibleMesh()
+{
+    USkeletalMeshComponent* MeshComponent = GetMesh();
+    if (!MeshComponent || MeshComponent->GetSkeletalMeshAsset())
+    {
+        return;
+    }
+
+    UE_LOG(LogRazigra, Warning,
+        TEXT("The shared hero has no mesh. Set GlobalGameData.HeroBlueprint to a hero Blueprint "
+             "(run the CreateRazigraData commandlet to generate /Game/Blueprints/BP_SharedHero). "
+             "Falling back to the sample mannequin."));
+
+    if (USkeletalMesh* FallbackMesh = LoadObject<USkeletalMesh>(nullptr,
+        TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")))
+    {
+        MeshComponent->SetSkeletalMeshAsset(FallbackMesh);
+    }
+    if (!MeshComponent->GetAnimInstance())
+    {
+        if (UClass* FallbackAnimation = LoadClass<UAnimInstance>(nullptr,
+            TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed.ABP_Unarmed_C")))
+        {
+            MeshComponent->SetAnimInstanceClass(FallbackAnimation);
+        }
+    }
 }
 
 void ASharedHeroCharacter::Tick(float DeltaSeconds)
