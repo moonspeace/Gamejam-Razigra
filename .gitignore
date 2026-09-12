@@ -51,6 +51,13 @@ SourceArt/**/*.tga
 Binaries/*
 Plugins/**/Binaries/*
 
+# Checked-in Win64 editor binaries let artists open the project without a C++ toolchain.
+!/Binaries/Win64/
+/Binaries/Win64/*
+!/Binaries/Win64/UnrealEditor-GamejamRazigra.dll
+!/Binaries/Win64/UnrealEditor.modules
+!/Binaries/Win64/GamejamRazigraEditor.target
+
 # Builds
 Build/*
 
