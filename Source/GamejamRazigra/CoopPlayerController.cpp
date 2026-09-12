@@ -21,9 +21,23 @@ void ACoopPlayerController::BeginPlay()
     Super::BeginPlay();
     if (IsLocalController())
     {
-        // Nothing to look at until the shared hero exists, so sit on black rather than showing
-        // an empty level while the other player is still connecting.
-        HoldScreenBlack();
+        const UGameInstance* Instance = GetGameInstance();
+        const UEOSSessionSubsystem* Sessions = Instance
+            ? Instance->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+        if (Sessions && Sessions->IsSinglePlayerMode())
+        {
+            // Solo OpenLevel can recreate this controller before the game mode has spawned and
+            // bound the hero. Never apply the multiplayer waiting blackout to that short gap.
+            if (PlayerCameraManager)
+            {
+                PlayerCameraManager->SetManualCameraFade(0.0f, FLinearColor::Black, false);
+            }
+        }
+        else
+        {
+            // Multiplayer deliberately remains black while the other player is connecting.
+            HoldScreenBlack();
+        }
     }
 }
 
@@ -192,6 +206,22 @@ void ACoopPlayerController::HandleGunFired(bool bHit)
     {
         GameplayHud->ShowFireFeedback(bHit);
     }
+}
+
+void ACoopPlayerController::RequestRestartRun()
+{
+    ServerRequestRestartRun();
+}
+
+void ACoopPlayerController::ServerRequestRestartRun_Implementation()
+{
+    if (!GetWorld())
+    {
+        return;
+    }
+    const FString Map = UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
+    const bool bStandalone = GetWorld()->GetNetMode() == NM_Standalone;
+    GetWorld()->ServerTravel(Map + (bStandalone ? TEXT("") : TEXT("?listen")));
 }
 
 void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCharacter* Hero)

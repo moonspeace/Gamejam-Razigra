@@ -7,6 +7,15 @@
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 
+void ACoopGameState::AddZombieKill()
+{
+    if (HasAuthority())
+    {
+        ++ZombieKillCount;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopGameState::OnRep_SharedHero()
 {
     if (!SharedHero)
@@ -39,4 +48,5 @@ void ACoopGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ACoopGameState, SharedHero);
     DOREPLIFETIME(ACoopGameState, ConnectedPlayerCount);
     DOREPLIFETIME(ACoopGameState, RequiredPlayerCount);
+    DOREPLIFETIME(ACoopGameState, ZombieKillCount);
 }

@@ -1,6 +1,9 @@
 #include "ZombieCharacter.h"
 
 #include "AIController.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
+#include "CoopGameState.h"
 #include "CoopGameState.h"
 #include "Components/CapsuleComponent.h"
 #include "DamageNumberActor.h"
@@ -181,6 +184,10 @@ float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damag
     }
     if (Health <= 0.0f)
     {
+        if (ACoopGameState* State = GetWorld()->GetGameState<ACoopGameState>())
+        {
+            State->AddZombieKill();
+        }
         bIsDead = true;
         bIsAttacking = false;
         GetCharacterMovement()->DisableMovement();
@@ -234,6 +241,14 @@ void AZombieCharacter::MulticastDamageReceived_Implementation(float DamageAmount
 
 void AZombieCharacter::MulticastAttack_Implementation()
 {
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    if (UAnimMontage* AttackMontage = Data->ZombieAttackMontage.LoadSynchronous())
+    {
+        if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
+        {
+            AnimInstance->Montage_Play(AttackMontage);
+        }
+    }
     BP_OnZombieAttack();
 }
 
@@ -249,11 +264,20 @@ void AZombieCharacter::StartDeathEffect()
     DeathMaterials.Reset();
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     UMaterialInterface* DeathMaterial = Data->ZombieDeathMaterial.LoadSynchronous();
+    if (!DeathMaterial)
+    {
+        // Existing GlobalGameData assets can have serialized the newly-added soft reference as
+        // None. Keep the effect operational even before a designer resaves that data asset.
+        DeathMaterial = LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath"));
+    }
     if (!DeathMaterial || !GetMesh())
     {
         UE_LOG(LogRazigra, Warning, TEXT("Zombie death material is missing; %s will use visibility blinking."), *GetName());
         return;
     }
+    UE_LOG(LogRazigra, Log, TEXT("Zombie %s starting death effect with material %s."),
+        *GetName(), *DeathMaterial->GetPathName());
 
     const int32 SlotCount = FMath::Max(1, GetMesh()->GetNumMaterials());
     for (int32 Slot = 0; Slot < SlotCount; ++Slot)

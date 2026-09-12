@@ -34,6 +34,9 @@ public:
     /** Local-only crosshair response to a replicated shot. */
     void HandleGunFired(bool bHit);
 
+    UFUNCTION(BlueprintCallable, Category="Zombie Zero|Game")
+    void RequestRestartRun();
+
     UFUNCTION(BlueprintPure, Category="Razigra")
     int32 GetPlayerSlot() const { return PlayerSlot; }
 
@@ -43,6 +46,9 @@ protected:
 
     UFUNCTION(Server, Unreliable)
     void ServerSubmitLook(FVector2D LookDelta);
+
+    UFUNCTION(Server, Reliable)
+    void ServerRequestRestartRun();
 
     UFUNCTION(Client, Reliable)
     void ClientBindToSharedHero(ASharedHeroCharacter* Hero);

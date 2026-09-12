@@ -19,6 +19,9 @@ def create_or_update_material():
     material.set_editor_property("blend_mode", unreal.BlendMode.BLEND_MASKED)
     material.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
     material.set_editor_property("two_sided", True)
+    # Without this permutation a packaged/runtime skeletal mesh substitutes the engine's
+    # default grid material even though the asset itself validates in the editor.
+    material.set_editor_property("used_with_skeletal_mesh", True)
     material.set_editor_property("opacity_mask_clip_value", 0.3333)
 
     death_color = unreal.MaterialEditingLibrary.create_material_expression(

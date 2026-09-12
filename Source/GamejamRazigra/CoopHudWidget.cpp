@@ -2,6 +2,7 @@
 
 #include "Blueprint/WidgetTree.h"
 #include "Components/Border.h"
+#include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
@@ -27,15 +28,15 @@ namespace RazigraHud
     static constexpr float SpaceKeyWidth = 112.0f;
     static constexpr float KeyHeight = 44.0f;
     static constexpr float KeyGap = 3.0f;
-    static constexpr float MeterThickness = 10.0f;
-    static constexpr float MeterLength = 96.0f;
+    static constexpr float MeterThickness = 14.0f;
+    static constexpr float MeterLength = 124.0f;
 }
 
 UCoopHudWidget::UCoopHudWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
-    , PlayerOneColor(0.85f, 0.13f, 0.16f, 0.95f)
-    , PlayerTwoColor(0.09f, 0.45f, 0.95f, 0.95f)
-    , ConsensusColor(0.10f, 0.76f, 0.35f, 0.98f)
+    , PlayerOneColor(1.0f, 0.015f, 0.035f, 1.0f)
+    , PlayerTwoColor(0.0f, 0.32f, 1.0f, 1.0f)
+    , ConsensusColor(0.0f, 1.0f, 0.18f, 1.0f)
     , IdleColor(0.05f, 0.06f, 0.08f, 0.78f)
     , ColorBlendSpeed(14.0f)
 {
@@ -54,6 +55,7 @@ void UCoopHudWidget::NativeOnInitialized()
 
     BuildDamageVignette(Root);
     BuildCombatIndicators(Root);
+    BuildScoreAndGameOver(Root);
 
     // No panel behind the keys: the key caps are the only chrome.
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HudRow"));
@@ -112,29 +114,19 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
 
     USizeBox* HealthBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthBox"));
-    HealthBox->SetHeightOverride(28.0f);
-    UOverlay* HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("HeroHealthOverlay"));
-    HealthBox->SetContent(HealthOverlay);
-
+    HealthBox->SetHeightOverride(14.0f);
     HealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HeroHealthBar"));
     FProgressBarStyle HealthStyle = HealthBar->GetWidgetStyle();
+    HealthStyle.BackgroundImage.DrawAs = ESlateBrushDrawType::RoundedBox;
+    HealthStyle.BackgroundImage.OutlineSettings.CornerRadii = FVector4(7.0f);
     HealthStyle.BackgroundImage.TintColor = FSlateColor(Data->HeroHealthBackgroundColor);
+    HealthStyle.FillImage.DrawAs = ESlateBrushDrawType::RoundedBox;
+    HealthStyle.FillImage.OutlineSettings.CornerRadii = FVector4(7.0f);
     HealthStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
     HealthBar->SetWidgetStyle(HealthStyle);
     HealthBar->SetFillColorAndOpacity(Data->HeroHealthFillColor);
     HealthBar->SetPercent(1.0f);
-    HealthOverlay->AddChildToOverlay(HealthBar);
-
-    HealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeroHealthText"));
-    HealthText->SetFont(Data->HudKeyLabelFont);
-    HealthText->SetText(FText::FromString(TEXT("HEALTH")));
-    HealthText->SetJustification(ETextJustify::Center);
-    HealthText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-    if (UOverlaySlot* TextSlot = HealthOverlay->AddChildToOverlay(HealthText))
-    {
-        TextSlot->SetHorizontalAlignment(HAlign_Fill);
-        TextSlot->SetVerticalAlignment(VAlign_Center);
-    }
+    HealthBox->SetContent(HealthBar);
     UHorizontalBox* HealthWidthLayout = WidgetTree->ConstructWidget<UHorizontalBox>(
         UHorizontalBox::StaticClass(), TEXT("HeroHealthWidthLayout"));
     USizeBox* LeftSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthLeftSpacer"));
@@ -151,7 +143,8 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
     if (UOverlaySlot* HealthSlot = Root->AddChildToOverlay(HealthWidthLayout))
     {
         HealthSlot->SetHorizontalAlignment(HAlign_Fill);
-        HealthSlot->SetVerticalAlignment(VAlign_Center);
+        HealthSlot->SetVerticalAlignment(VAlign_Top);
+        HealthSlot->SetPadding(FMargin(0.0f, 34.0f, 0.0f, 0.0f));
     }
 
     CrosshairBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CrosshairCircleBox"));
@@ -265,6 +258,11 @@ UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString&
     CardBox->SetHeightOverride(RazigraHud::KeyHeight);
 
     UBorder* Card = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), *Tag);
+    FSlateBrush CardBrush;
+    CardBrush.DrawAs = ESlateBrushDrawType::Box;
+    CardBrush.OutlineSettings.Width = 1.0f;
+    CardBrush.OutlineSettings.Color = FSlateColor(FLinearColor(0.32f, 0.36f, 0.42f, 0.75f));
+    Card->SetBrush(CardBrush);
     Card->SetBrushColor(IdleColor);
     Card->SetPadding(FMargin(2.0f));
     Card->SetHorizontalAlignment(HAlign_Center);
@@ -274,7 +272,7 @@ UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString&
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     UTextBlock* Key = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Key")));
     Key->SetText(FText::FromString(KeyText));
-    Key->SetFont(KeyText.Len() > 1 ? Data->HudKeyLabelFont : Data->HudKeyFont);
+    Key->SetFont(Data->HudKeyFont);
     Key->SetJustification(ETextJustify::Center);
     Key->SetColorAndOpacity(FSlateColor(RazigraHud::MutedTextColor));
     Card->SetContent(Key);
@@ -296,7 +294,9 @@ UProgressBar* UCoopHudWidget::BuildMeter(const FString& Tag, bool bVertical, con
 {
     UProgressBar* Meter = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), *Tag);
     FProgressBarStyle MeterStyle = Meter->GetWidgetStyle();
+    MeterStyle.BackgroundImage.DrawAs = ESlateBrushDrawType::Box;
     MeterStyle.BackgroundImage.TintColor = FSlateColor(RazigraHud::MeterBackgroundColor);
+    MeterStyle.FillImage.DrawAs = ESlateBrushDrawType::Box;
     MeterStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
     Meter->SetWidgetStyle(MeterStyle);
     Meter->SetBarFillType(bVertical ? EProgressBarFillType::BottomToTop : EProgressBarFillType::LeftToRight);
@@ -304,7 +304,83 @@ UProgressBar* UCoopHudWidget::BuildMeter(const FString& Tag, bool bVertical, con
     // Half full is the neutral resting point, so the fill edge reads as a needle.
     Meter->SetPercent(0.5f);
     AxisMeters.Add(Meter);
+    MeterBaseColors.Add(Color);
     return Meter;
+}
+
+void UCoopHudWidget::BuildScoreAndGameOver(UOverlay* Root)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    KillText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("KillCount"));
+    KillText->SetText(FText::FromString(TEXT("KILLS  000")));
+    KillText->SetFont(Data->MenuButtonFont);
+    KillText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.08f, 0.025f, 1.0f)));
+    KillText->SetShadowOffset(FVector2D(2.0f, 2.0f));
+    if (UOverlaySlot* KillSlot = Root->AddChildToOverlay(KillText))
+    {
+        KillSlot->SetHorizontalAlignment(HAlign_Right);
+        KillSlot->SetVerticalAlignment(VAlign_Top);
+        KillSlot->SetPadding(FMargin(0.0f, 34.0f, 38.0f, 0.0f));
+    }
+
+    SmashText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("SmashText"));
+    SmashText->SetText(FText::FromString(TEXT("SMASH!")));
+    SmashText->SetFont(Data->MenuTitleFont);
+    SmashText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.02f, 0.0f, 0.0f)));
+    SmashText->SetJustification(ETextJustify::Center);
+    if (UOverlaySlot* SmashSlot = Root->AddChildToOverlay(SmashText))
+    {
+        SmashSlot->SetHorizontalAlignment(HAlign_Center);
+        SmashSlot->SetVerticalAlignment(VAlign_Center);
+        SmashSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 180.0f));
+    }
+
+    GameOverOverlay = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("GameOverOverlay"));
+    GameOverOverlay->SetBrushColor(FLinearColor(0.005f, 0.005f, 0.008f, 0.92f));
+    GameOverOverlay->SetHorizontalAlignment(HAlign_Center);
+    GameOverOverlay->SetVerticalAlignment(VAlign_Center);
+    GameOverOverlay->SetVisibility(ESlateVisibility::Collapsed);
+    UVerticalBox* Panel = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("GameOverPanel"));
+    GameOverOverlay->SetContent(Panel);
+    UTextBlock* Title = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("GameOverTitle"));
+    Title->SetText(FText::FromString(TEXT("GAME OVER")));
+    Title->SetFont(Data->MenuTitleFont);
+    Title->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.02f, 0.01f, 1.0f)));
+    Title->SetJustification(ETextJustify::Center);
+    Panel->AddChildToVerticalBox(Title)->SetPadding(FMargin(60.0f, 45.0f, 60.0f, 28.0f));
+    UButton* Restart = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RestartRunButton"));
+    FButtonStyle RestartStyle = Restart->GetStyle();
+    FSlateBrush RestartNormal;
+    RestartNormal.DrawAs = ESlateBrushDrawType::Box;
+    RestartNormal.TintColor = FSlateColor(FLinearColor(0.10f, 0.01f, 0.01f, 1.0f));
+    FSlateBrush RestartHover = RestartNormal;
+    RestartHover.TintColor = FSlateColor(FLinearColor(0.8f, 0.015f, 0.005f, 1.0f));
+    RestartStyle.SetNormal(RestartNormal);
+    RestartStyle.SetHovered(RestartHover);
+    RestartStyle.SetPressed(RestartHover);
+    RestartStyle.NormalPadding = FMargin(22.0f, 13.0f);
+    RestartStyle.PressedPadding = FMargin(22.0f, 15.0f, 22.0f, 11.0f);
+    Restart->SetStyle(RestartStyle);
+    UTextBlock* RestartLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RestartRunLabel"));
+    RestartLabel->SetText(FText::FromString(TEXT("RESTART RUN")));
+    RestartLabel->SetFont(Data->MenuButtonFont);
+    RestartLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    Restart->SetContent(RestartLabel);
+    Restart->OnClicked.AddDynamic(this, &ThisClass::HandleRestartClicked);
+    Panel->AddChildToVerticalBox(Restart)->SetPadding(FMargin(60.0f, 0.0f, 60.0f, 45.0f));
+    if (UOverlaySlot* GameOverSlot = Root->AddChildToOverlay(GameOverOverlay))
+    {
+        GameOverSlot->SetHorizontalAlignment(HAlign_Fill);
+        GameOverSlot->SetVerticalAlignment(VAlign_Fill);
+    }
+}
+
+void UCoopHudWidget::HandleRestartClicked()
+{
+    if (ACoopPlayerController* Controller = Cast<ACoopPlayerController>(GetOwningPlayer()))
+    {
+        Controller->RequestRestartRun();
+    }
 }
 
 /**
@@ -362,10 +438,15 @@ UWidget* UCoopHudWidget::BuildLegend()
         const FString Tag = FString::Printf(TEXT("Legend_%d"), Index);
 
         USizeBox* ChipBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *(Tag + TEXT("Box")));
-        ChipBox->SetWidthOverride(24.0f);
-        ChipBox->SetHeightOverride(24.0f);
+        ChipBox->SetWidthOverride(36.0f);
+        ChipBox->SetHeightOverride(36.0f);
 
         UBorder* Chip = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), *Tag);
+        FSlateBrush ChipBrush;
+        ChipBrush.DrawAs = ESlateBrushDrawType::Box;
+        ChipBrush.OutlineSettings.Width = 2.0f;
+        ChipBrush.OutlineSettings.Color = FSlateColor(FLinearColor::White);
+        Chip->SetBrush(ChipBrush);
         Chip->SetBrushColor(Index == 0 ? PlayerOneColor : PlayerTwoColor);
         Chip->SetHorizontalAlignment(HAlign_Center);
         Chip->SetVerticalAlignment(VAlign_Center);
@@ -376,6 +457,8 @@ UWidget* UCoopHudWidget::BuildLegend()
         Digit->SetFont(UGlobalGameData::Get(this)->HudKeyFont);
         Digit->SetJustification(ETextJustify::Center);
         Digit->SetColorAndOpacity(FSlateColor(RazigraHud::ActiveTextColor));
+        Digit->SetShadowOffset(FVector2D(2.0f, 2.0f));
+        Digit->SetShadowColorAndOpacity(FLinearColor::Black);
         Chip->SetContent(Digit);
 
         LegendChips.Add(Chip);
@@ -417,15 +500,48 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     const int32 RequiredParticipants = Hero ? FMath::Max(1, Hero->GetRequiredConsensusParticipants()) : 2;
     const int32 LocalIndex = ResolveLocalParticipantIndex();
 
+    const ACoopGameState* State = GetWorld() ? GetWorld()->GetGameState<ACoopGameState>() : nullptr;
+    const int32 KillCount = State ? State->ZombieKillCount : 0;
+    if (KillCount != DisplayedKillCount)
+    {
+        DisplayedKillCount = KillCount;
+        KillSmashRemaining = 0.55f;
+        if (KillText)
+        {
+            KillText->SetText(FText::FromString(FString::Printf(TEXT("KILLS  %03d"), KillCount)));
+        }
+    }
+    KillSmashRemaining = FMath::Max(0.0f, KillSmashRemaining - InDeltaTime);
+    const float SmashPhase = KillSmashRemaining / 0.55f;
+    if (SmashText)
+    {
+        FLinearColor SmashColor(1.0f, 0.02f, 0.0f, FMath::Clamp(SmashPhase * 2.0f, 0.0f, 1.0f));
+        SmashText->SetColorAndOpacity(FSlateColor(SmashColor));
+        SmashText->SetRenderScale(FVector2D(1.0f + SmashPhase * 1.4f));
+        SmashText->SetRenderTransformAngle(FMath::Sin(SmashPhase * 38.0f) * 4.0f);
+    }
+    if (KillText)
+    {
+        KillText->SetRenderScale(FVector2D(1.0f + SmashPhase * 0.45f));
+    }
+
+    if (Hero && Hero->IsDead() && !bGameOverShown)
+    {
+        bGameOverShown = true;
+        GameOverOverlay->SetVisibility(ESlateVisibility::Visible);
+        if (APlayerController* Controller = GetOwningPlayer())
+        {
+            Controller->bShowMouseCursor = true;
+            FInputModeUIOnly InputMode;
+            InputMode.SetWidgetToFocus(GameOverOverlay->TakeWidget());
+            Controller->SetInputMode(InputMode);
+        }
+    }
+
     if (HealthBar)
     {
         HealthBar->SetPercent(Hero ? Hero->GetHealthNormalized() : 0.0f);
     }
-    if (HealthText)
-    {
-        HealthText->SetText(FText::FromString(TEXT("HEALTH")));
-    }
-
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     DamageFeedbackRemaining = FMath::Max(0.0f, DamageFeedbackRemaining - InDeltaTime);
     const float VignetteAlpha = Data->HeroDamageVignetteDuration > 0.0f
@@ -481,6 +597,10 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         const float Value = bVertical ? -Axis.Y : Axis.X;
         const float Target = 0.5f + 0.5f * FMath::Clamp(Value / MeterRange, -1.0f, 1.0f);
         Meter->SetPercent(FMath::FInterpTo(Meter->GetPercent(), Target, InDeltaTime, ColorBlendSpeed));
+        const float Energy = FMath::Abs(Target - 0.5f) * 2.0f;
+        const FLinearColor Base = MeterBaseColors.IsValidIndex(Index) ? MeterBaseColors[Index] : FLinearColor::White;
+        Meter->SetFillColorAndOpacity(FMath::Lerp(Base, FLinearColor::White, Energy * 0.35f));
+        Meter->SetRenderScale(FVector2D(1.0f + Energy * 0.06f));
     }
 
     for (int32 Index = 0; Index < ActionCards.Num(); ++Index)
@@ -516,6 +636,9 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         if (UBorder* Card = ActionCards[Index])
         {
             Card->SetBrushColor(CardColors[Index]);
+            const float TargetScale = bActive ? 1.08f : 1.0f;
+            Card->SetRenderScale(FMath::Vector2DInterpTo(Card->GetRenderTransform().Scale,
+                FVector2D(TargetScale), InDeltaTime, 16.0f));
         }
         if (UTextBlock* Key = ActionKeyLabels[Index])
         {

@@ -8,6 +8,7 @@
 class ASharedHeroCharacter;
 class AZombieCharacter;
 class UAnimInstance;
+class UAnimMontage;
 class UCameraShakeBase;
 class UCoopHudWidget;
 class UCoopMenuWidget;
@@ -71,6 +72,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftClassPtr<UAnimInstance> ZombieAnimationClass;
 
+    /** Montage played on every machine when a zombie begins its attack wind-up. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Animation")
+    TSoftObjectPtr<UAnimMontage> ZombieAttackMontage;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float HeroMaxHealth = 100.0f;
 
@@ -105,6 +110,21 @@ public:
     /** Bone or socket where the cosmetic tracer and muzzle flash begin. The hit trace remains camera-based. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
     FName VisualTraceOriginBoneName = TEXT("hand_r");
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser")
+    TSoftObjectPtr<UMaterialInterface> LaserTraceMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser", meta=(ClampMin="0.1"))
+    float LaserTraceThickness = 2.5f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser", meta=(ClampMin="0.01"))
+    float LaserTraceLifetime = 0.12f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser")
+    FLinearColor LaserTraceColor = FLinearColor(1.0f, 0.04f, 0.01f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser", meta=(ClampMin="0"))
+    float LaserTraceIntensity = 35.0f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Crosshair", meta=(ClampMin="1"))
     float CrosshairDotSize = 6.0f;
