@@ -13,6 +13,7 @@
 #include "Misc/Paths.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystem.h"
+#include "OnlineSubsystemUtils.h"
 #include "OnlineSessionSettings.h"
 #include "RazigraGameInstance.h"
 #include "Kismet/GameplayStatics.h"
@@ -111,7 +112,10 @@ void UEOSSessionSubsystem::LoadExternalEOSConfig()
 
 IOnlineSubsystem* UEOSSessionSubsystem::GetOnlineSubsystem() const
 {
-    return IOnlineSubsystem::Get();
+    // In editor/PIE, EOS creates one subsystem per world context. The EOS net driver
+    // resolves its socket subsystem the same way, so authentication and sessions must
+    // use this instance rather than the global default or P2P bind has no local user.
+    return Online::GetSubsystem(GetWorld());
 }
 
 IOnlineSessionPtr UEOSSessionSubsystem::GetSessions() const
@@ -365,7 +369,8 @@ void UEOSSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
         bWasSuccessful ? TEXT("true") : TEXT("false"), ResultCount);
     if (!bWasSuccessful || !SessionSearch.IsValid() || SessionSearch->SearchResults.IsEmpty())
     {
-        BroadcastStatus(TEXT("No joinable Razigra session was found."));
+        BroadcastStatus(FString::Printf(TEXT("No joinable Zombie Zero sessions found via %s (%d results checked)."),
+            *GetOnlineSubsystemName(), ResultCount));
         return;
     }
 

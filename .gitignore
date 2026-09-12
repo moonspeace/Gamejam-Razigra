@@ -81,5 +81,6 @@ Plugins/**/Intermediate/*
 
 # Cache files for the editor to use
 DerivedDataCache/*
-# Local EOS credentials (copy from EOS.ini.example).
+
+# Local EOS credentials; transfer Config/EOS.ini privately to each developer machine.
 /Config/EOS.ini
