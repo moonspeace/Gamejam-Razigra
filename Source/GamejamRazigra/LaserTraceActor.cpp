@@ -2,6 +2,8 @@
 
 #include "Components/StaticMeshComponent.h"
 #include "GlobalGameData.h"
+#include "GamejamRazigra.h"
+#include "Materials/Material.h"
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "UObject/ConstructorHelpers.h"
@@ -41,8 +43,14 @@ void ALaserTraceActor::InitializeLaser(const FVector& Start, const FVector& End)
     LaserMesh->SetRelativeScale3D(FVector(RadiusScale, RadiusScale, Length / 100.0f));
 
     UMaterialInterface* BaseMaterial = Data->LaserTraceMaterial.LoadSynchronous();
-    if (!BaseMaterial)
+    const UMaterialInterface* EngineDefault = UMaterial::GetDefaultMaterial(MD_Surface);
+    if (!BaseMaterial || BaseMaterial == EngineDefault)
     {
+        if (BaseMaterial == EngineDefault)
+        {
+            UE_LOG(LogRazigra, Warning,
+                TEXT("GlobalGameData laser material resolved to the engine default; forcing M_LaserTrace."));
+        }
         BaseMaterial = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_LaserTrace.M_LaserTrace"));
     }
     if (BaseMaterial)
@@ -52,6 +60,12 @@ void ALaserTraceActor::InitializeLaser(const FVector& Start, const FVector& End)
         LaserMaterial->SetScalarParameterValue(TEXT("Intensity"), Data->LaserTraceIntensity);
         LaserMaterial->SetScalarParameterValue(TEXT("Opacity"), 1.0f);
         LaserMesh->SetMaterial(0, LaserMaterial);
+        UE_LOG(LogRazigra, Log, TEXT("Laser trace using material %s (MID %s)."),
+            *BaseMaterial->GetPathName(), *LaserMaterial->GetPathName());
+    }
+    else
+    {
+        UE_LOG(LogRazigra, Error, TEXT("Laser trace material failed to load; no material was assigned."));
     }
 }
 

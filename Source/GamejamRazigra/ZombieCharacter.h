@@ -80,6 +80,7 @@ private:
     double NextAttackTime = 0.0;
     double AttackHitTime = 0.0;
     float DeathEffectElapsed = 0.0f;
+    FTimerHandle RestoreAnimationTimer;
 
     void AcquireTarget();
     void UpdateServerBehavior();
@@ -87,4 +88,5 @@ private:
     void ResolveAttack();
     void StartDeathEffect();
     void UpdateDeathEffect(float DeltaSeconds);
+    void RestoreAnimationBlueprint();
 };

@@ -28,15 +28,15 @@ namespace RazigraHud
     static constexpr float SpaceKeyWidth = 112.0f;
     static constexpr float KeyHeight = 44.0f;
     static constexpr float KeyGap = 3.0f;
-    static constexpr float MeterThickness = 14.0f;
-    static constexpr float MeterLength = 124.0f;
+    static constexpr float MeterThickness = 24.0f;
+    static constexpr float MeterLength = 240.0f;
 }
 
 UCoopHudWidget::UCoopHudWidget(const FObjectInitializer& ObjectInitializer)
     : Super(ObjectInitializer)
     , PlayerOneColor(1.0f, 0.015f, 0.035f, 1.0f)
     , PlayerTwoColor(0.0f, 0.32f, 1.0f, 1.0f)
-    , ConsensusColor(0.0f, 1.0f, 0.18f, 1.0f)
+    , ConsensusColor(0.0f, 180.0f / 255.0f, 0.0f, 1.0f)
     , IdleColor(0.05f, 0.06f, 0.08f, 0.78f)
     , ColorBlendSpeed(14.0f)
 {
@@ -100,6 +100,7 @@ void UCoopHudWidget::NativeOnInitialized()
     BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Crouch, TEXT("CTRL"), RazigraHud::ActionKeyWidth));
     BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Jump, TEXT("SPACE"), RazigraHud::SpaceKeyWidth));
     BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Fire, TEXT("LMB"), RazigraHud::ActionKeyWidth));
+    BottomRow->AddChildToHorizontalBox(BuildRoleAbilityCard());
     Keyboard->AddChildToVerticalBox(BottomRow);
 
     // Aim is metered rather than lit: the bars replace the old mouse key cap.
@@ -308,12 +309,51 @@ UProgressBar* UCoopHudWidget::BuildMeter(const FString& Tag, bool bVertical, con
     return Meter;
 }
 
+UWidget* UCoopHudWidget::BuildRoleAbilityCard()
+{
+    USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("RMBAbilityBox"));
+    Box->SetWidthOverride(124.0f);
+    Box->SetHeightOverride(RazigraHud::KeyHeight);
+    UOverlay* AbilityOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("RMBOverlay"));
+    Box->SetContent(AbilityOverlay);
+    UHorizontalBox* Split = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("RMBSplit"));
+    if (UOverlaySlot* SplitSlot = AbilityOverlay->AddChildToOverlay(Split))
+    {
+        SplitSlot->SetHorizontalAlignment(HAlign_Fill);
+        SplitSlot->SetVerticalAlignment(VAlign_Fill);
+    }
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        UBorder* Half = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(),
+            *FString::Printf(TEXT("RMBPlayer%d"), Index + 1));
+        Half->SetBrushColor(IdleColor);
+        Half->SetHorizontalAlignment(HAlign_Center);
+        Half->SetVerticalAlignment(VAlign_Center);
+        FSlateChildSize HalfSize;
+        HalfSize.SizeRule = ESlateSizeRule::Fill;
+        HalfSize.Value = 1.0f;
+        Split->AddChildToHorizontalBox(Half)->SetSize(HalfSize);
+        AbilityCards.Add(Half);
+    }
+    UTextBlock* Label = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RMBLabel"));
+    Label->SetText(FText::FromString(TEXT("RMB")));
+    Label->SetFont(UGlobalGameData::Get(this)->HudKeyFont);
+    Label->SetJustification(ETextJustify::Center);
+    Label->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    if (UOverlaySlot* LabelSlot = AbilityOverlay->AddChildToOverlay(Label))
+    {
+        LabelSlot->SetHorizontalAlignment(HAlign_Fill);
+        LabelSlot->SetVerticalAlignment(VAlign_Center);
+    }
+    return Box;
+}
+
 void UCoopHudWidget::BuildScoreAndGameOver(UOverlay* Root)
 {
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     KillText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("KillCount"));
     KillText->SetText(FText::FromString(TEXT("KILLS  000")));
-    KillText->SetFont(Data->MenuButtonFont);
+    KillText->SetFont(Data->HudKeyFont);
     KillText->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.08f, 0.025f, 1.0f)));
     KillText->SetShadowOffset(FVector2D(2.0f, 2.0f));
     if (UOverlaySlot* KillSlot = Root->AddChildToOverlay(KillText))
@@ -390,43 +430,49 @@ void UCoopHudWidget::HandleRestartClicked()
  */
 UWidget* UCoopHudWidget::BuildAxisMeters()
 {
-    UHorizontalBox* Meters = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("AxisMeters"));
+    USizeBox* CrossBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("AxisCrossBox"));
+    CrossBox->SetWidthOverride(RazigraHud::MeterLength);
+    CrossBox->SetHeightOverride(112.0f);
+    UOverlay* Meters = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("AxisCross"));
+    CrossBox->SetContent(Meters);
 
-    UVerticalBox* Horizontals = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("YawMeters"));
-    for (int32 Index = 0; Index < 2; ++Index)
+    USizeBox* YawBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("TotalYawBox"));
+    YawBox->SetWidthOverride(RazigraHud::MeterLength);
+    YawBox->SetHeightOverride(RazigraHud::MeterThickness);
+    UHorizontalBox* YawSplit = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("YawDirectionSplit"));
+    YawBox->SetContent(YawSplit);
+    UProgressBar* LeftBar = BuildMeter(TEXT("TotalYawLeft"), false, ConsensusColor);
+    LeftBar->SetBarFillType(EProgressBarFillType::RightToLeft);
+    UProgressBar* RightBar = BuildMeter(TEXT("TotalYawRight"), false, ConsensusColor);
+    RightBar->SetBarFillType(EProgressBarFillType::LeftToRight);
+    FSlateChildSize HalfFill;
+    HalfFill.SizeRule = ESlateSizeRule::Fill;
+    HalfFill.Value = 1.0f;
+    YawSplit->AddChildToHorizontalBox(LeftBar)->SetSize(HalfFill);
+    YawSplit->AddChildToHorizontalBox(RightBar)->SetSize(HalfFill);
+    if (UOverlaySlot* HorizontalSlot = Meters->AddChildToOverlay(YawBox))
     {
-        USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),
-            *FString::Printf(TEXT("YawBox_%d"), Index));
-        Box->SetWidthOverride(RazigraHud::MeterLength);
-        Box->SetHeightOverride(RazigraHud::MeterThickness);
-        Box->SetContent(BuildMeter(FString::Printf(TEXT("YawMeter_%d"), Index), false,
-            Index == 0 ? PlayerOneColor : PlayerTwoColor));
-        if (UVerticalBoxSlot* BoxSlot = Horizontals->AddChildToVerticalBox(Box))
-        {
-            BoxSlot->SetPadding(FMargin(0.0f, RazigraHud::KeyGap));
-        }
-    }
-    if (UHorizontalBoxSlot* HorizontalSlot = Meters->AddChildToHorizontalBox(Horizontals))
-    {
+        HorizontalSlot->SetHorizontalAlignment(HAlign_Center);
         HorizontalSlot->SetVerticalAlignment(VAlign_Center);
-        HorizontalSlot->SetPadding(FMargin(0.0f, 0.0f, 10.0f, 0.0f));
     }
 
-    for (int32 Index = 0; Index < 2; ++Index)
+    USizeBox* PitchBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("TotalPitchBox"));
+    PitchBox->SetWidthOverride(RazigraHud::MeterThickness);
+    PitchBox->SetHeightOverride(112.0f);
+    UVerticalBox* PitchSplit = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("PitchDirectionSplit"));
+    PitchBox->SetContent(PitchSplit);
+    UProgressBar* UpBar = BuildMeter(TEXT("TotalPitchUp"), true, ConsensusColor);
+    UpBar->SetBarFillType(EProgressBarFillType::BottomToTop);
+    UProgressBar* DownBar = BuildMeter(TEXT("TotalPitchDown"), true, ConsensusColor);
+    DownBar->SetBarFillType(EProgressBarFillType::TopToBottom);
+    PitchSplit->AddChildToVerticalBox(UpBar)->SetSize(HalfFill);
+    PitchSplit->AddChildToVerticalBox(DownBar)->SetSize(HalfFill);
+    if (UOverlaySlot* PitchSlot = Meters->AddChildToOverlay(PitchBox))
     {
-        USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),
-            *FString::Printf(TEXT("PitchBox_%d"), Index));
-        Box->SetWidthOverride(RazigraHud::MeterThickness);
-        Box->SetHeightOverride(RazigraHud::KeyHeight * 2.0f);
-        Box->SetContent(BuildMeter(FString::Printf(TEXT("PitchMeter_%d"), Index), true,
-            Index == 0 ? PlayerOneColor : PlayerTwoColor));
-        if (UHorizontalBoxSlot* BoxSlot = Meters->AddChildToHorizontalBox(Box))
-        {
-            BoxSlot->SetVerticalAlignment(VAlign_Center);
-            BoxSlot->SetPadding(FMargin(RazigraHud::KeyGap, 0.0f));
-        }
+        PitchSlot->SetHorizontalAlignment(HAlign_Center);
+        PitchSlot->SetVerticalAlignment(VAlign_Center);
     }
-    return Meters;
+    return CrossBox;
 }
 
 /** Two numbered swatches. The local player's is solid, the other is dimmed: no caption needed. */
@@ -487,7 +533,7 @@ int32 UCoopHudWidget::ResolveLocalParticipantIndex() const
 {
     if (const ACoopPlayerController* Controller = Cast<ACoopPlayerController>(GetOwningPlayer()))
     {
-        return Controller->GetPlayerSlot();
+        return Controller->GetDisplayedRole();
     }
     return INDEX_NONE;
 }
@@ -568,6 +614,12 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             : Data->CrosshairDotColor);
     }
 
+    if (AbilityCards.Num() == 2)
+    {
+        AbilityCards[0]->SetBrushColor(Hero && Hero->IsHealingActive() ? PlayerOneColor : IdleColor);
+        AbilityCards[1]->SetBrushColor(Hero && Hero->IsShieldActive() ? PlayerTwoColor : IdleColor);
+    }
+
     for (int32 Index = 0; Index < LegendChips.Num(); ++Index)
     {
         if (UBorder* Chip = LegendChips[Index])
@@ -590,14 +642,17 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         {
             continue;
         }
-        const int32 Participant = Index % 2;
         const bool bVertical = Index >= 2;
-        const FVector2D Axis = Hero ? Hero->GetParticipantLookAxis(Participant) : FVector2D::ZeroVector;
+        const bool bNegativeHalf = (Index % 2) == 0;
+        const FVector2D Axis = Hero
+            ? Hero->GetParticipantLookAxis(0) + Hero->GetParticipantLookAxis(1)
+            : FVector2D::ZeroVector;
         // Screen-space pitch is inverted relative to the raw axis, so up on the mouse reads as up.
         const float Value = bVertical ? -Axis.Y : Axis.X;
-        const float Target = 0.5f + 0.5f * FMath::Clamp(Value / MeterRange, -1.0f, 1.0f);
+        const float SignedAmount = FMath::Clamp(Value / (MeterRange * 2.0f), -1.0f, 1.0f);
+        const float Target = bNegativeHalf ? FMath::Max(0.0f, -SignedAmount) : FMath::Max(0.0f, SignedAmount);
         Meter->SetPercent(FMath::FInterpTo(Meter->GetPercent(), Target, InDeltaTime, ColorBlendSpeed));
-        const float Energy = FMath::Abs(Target - 0.5f) * 2.0f;
+        const float Energy = Target;
         const FLinearColor Base = MeterBaseColors.IsValidIndex(Index) ? MeterBaseColors[Index] : FLinearColor::White;
         Meter->SetFillColorAndOpacity(FMath::Lerp(Base, FLinearColor::White, Energy * 0.35f));
         Meter->SetRenderScale(FVector2D(1.0f + Energy * 0.06f));

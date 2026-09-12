@@ -105,6 +105,9 @@ void ACoopPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("ConsensusCrouch"), IE_Released, this, &ThisClass::CrouchReleased);
     InputComponent->BindAction(TEXT("ConsensusFire"), IE_Pressed, this, &ThisClass::FirePressed);
     InputComponent->BindAction(TEXT("ConsensusFire"), IE_Released, this, &ThisClass::FireReleased);
+    InputComponent->BindAction(TEXT("RoleAbility"), IE_Pressed, this, &ThisClass::AbilityPressed);
+    InputComponent->BindAction(TEXT("RoleAbility"), IE_Released, this, &ThisClass::AbilityReleased);
+    InputComponent->BindAction(TEXT("SwitchSoloRole"), IE_Pressed, this, &ThisClass::SwitchSoloRole);
     InputComponent->BindAxis(TEXT("ConsensusLookX"), this, &ThisClass::LookX);
     InputComponent->BindAxis(TEXT("ConsensusLookY"), this, &ThisClass::LookY);
 }
@@ -116,6 +119,13 @@ void ACoopPlayerController::SetPlayerSlot(int32 NewSlot)
         PlayerSlot = NewSlot;
         OnRep_PlayerSlot();
     }
+}
+
+int32 ACoopPlayerController::GetDisplayedRole() const
+{
+    const UEOSSessionSubsystem* Sessions = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    return Sessions && Sessions->IsSinglePlayerMode() ? SoloAbilityRole : PlayerSlot;
 }
 
 void ACoopPlayerController::OnRep_PlayerSlot()
@@ -267,6 +277,43 @@ void ACoopPlayerController::ServerSubmitLook_Implementation(FVector2D LookDelta)
     }
 }
 
+void ACoopPlayerController::ServerSetRoleAbility_Implementation(bool bPressed)
+{
+    if (PlayerSlot != INDEX_NONE)
+    {
+        if (const ACoopGameState* State = GetWorld()->GetGameState<ACoopGameState>())
+        {
+            if (State->SharedHero)
+            {
+                const UEOSSessionSubsystem* Sessions = GetGameInstance()
+                    ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+                const int32 AbilityRole = Sessions && Sessions->IsSinglePlayerMode()
+                    ? SoloAbilityRole : PlayerSlot;
+                State->SharedHero->SetParticipantAbility(AbilityRole, bPressed);
+            }
+        }
+    }
+}
+
+void ACoopPlayerController::ServerSwitchSoloRole_Implementation()
+{
+    const UEOSSessionSubsystem* Sessions = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    if (!Sessions || !Sessions->IsSinglePlayerMode() || PlayerSlot == INDEX_NONE)
+    {
+        return;
+    }
+    if (const ACoopGameState* State = GetWorld()->GetGameState<ACoopGameState>())
+    {
+        if (State->SharedHero)
+        {
+            State->SharedHero->SetParticipantAbility(SoloAbilityRole, false);
+        }
+    }
+    SoloAbilityRole = SoloAbilityRole == 0 ? 1 : 0;
+    ForceNetUpdate();
+}
+
 void ACoopPlayerController::MoveForwardPressed() { SetAction(EConsensusAction::MoveForward, true); }
 void ACoopPlayerController::MoveForwardReleased() { SetAction(EConsensusAction::MoveForward, false); }
 void ACoopPlayerController::MoveBackwardPressed() { SetAction(EConsensusAction::MoveBackward, true); }
@@ -281,6 +328,9 @@ void ACoopPlayerController::CrouchPressed() { SetAction(EConsensusAction::Crouch
 void ACoopPlayerController::CrouchReleased() { SetAction(EConsensusAction::Crouch, false); }
 void ACoopPlayerController::FirePressed() { SetAction(EConsensusAction::Fire, true); }
 void ACoopPlayerController::FireReleased() { SetAction(EConsensusAction::Fire, false); }
+void ACoopPlayerController::AbilityPressed() { ServerSetRoleAbility(true); }
+void ACoopPlayerController::AbilityReleased() { ServerSetRoleAbility(false); }
+void ACoopPlayerController::SwitchSoloRole() { ServerSwitchSoloRole(); }
 void ACoopPlayerController::LookX(float Value) { PendingLookInput.X = Value; }
 void ACoopPlayerController::LookY(float Value) { PendingLookInput.Y = Value; }
 
@@ -288,4 +338,5 @@ void ACoopPlayerController::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACoopPlayerController, PlayerSlot);
+    DOREPLIFETIME(ACoopPlayerController, SoloAbilityRole);
 }

@@ -87,6 +87,12 @@ void AZombieSpawner::SpawnZombieNow()
         return;
     }
 
+    if (TotalSpawnLimit > 0 && TotalSpawned >= TotalSpawnLimit)
+    {
+        GetWorldTimerManager().ClearTimer(SpawnTimer);
+        return;
+    }
+
     SpawnedZombies.RemoveAll([](const TObjectPtr<AZombieCharacter>& Zombie) { return !IsValid(Zombie); });
     if (SpawnedZombies.Num() >= MaxAliveZombies || !ZombieClass)
     {
@@ -114,6 +120,11 @@ void AZombieSpawner::SpawnZombieNow()
         SpawnLocation, GetActorRotation(), Params))
     {
         SpawnedZombies.Add(Zombie);
+        ++TotalSpawned;
+        if (TotalSpawnLimit > 0 && TotalSpawned >= TotalSpawnLimit)
+        {
+            GetWorldTimerManager().ClearTimer(SpawnTimer);
+        }
     }
 }
 

@@ -3,7 +3,7 @@
 #include "AIController.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
-#include "CoopGameState.h"
+#include "Animation/AnimSequenceBase.h"
 #include "CoopGameState.h"
 #include "Components/CapsuleComponent.h"
 #include "DamageNumberActor.h"
@@ -16,6 +16,7 @@
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
 #include "SharedHeroCharacter.h"
+#include "TimerManager.h"
 
 AZombieCharacter::AZombieCharacter()
 {
@@ -190,7 +191,18 @@ float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damag
         }
         bIsDead = true;
         bIsAttacking = false;
+        GetWorldTimerManager().ClearTimer(RestoreAnimationTimer);
         GetCharacterMovement()->DisableMovement();
+        GetCharacterMovement()->StopMovementImmediately();
+        if (AAIController* AI = Cast<AAIController>(GetController()))
+        {
+            AI->StopMovement();
+        }
+        if (GetMesh())
+        {
+            GetMesh()->bPauseAnims = true;
+            GetMesh()->SetComponentTickEnabled(false);
+        }
         SetActorEnableCollision(false);
         MulticastDied();
         const UGlobalGameData* Data = UGlobalGameData::Get(this);
@@ -242,14 +254,33 @@ void AZombieCharacter::MulticastDamageReceived_Implementation(float DamageAmount
 void AZombieCharacter::MulticastAttack_Implementation()
 {
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
-    if (UAnimMontage* AttackMontage = Data->ZombieAttackMontage.LoadSynchronous())
+    UAnimSequenceBase* DirectAttack = Data->ZombieAttackAnimation.LoadSynchronous();
+    if (DirectAttack && GetMesh())
     {
-        if (UAnimInstance* AnimInstance = GetMesh() ? GetMesh()->GetAnimInstance() : nullptr)
-        {
-            AnimInstance->Montage_Play(AttackMontage);
-        }
+        GetMesh()->PlayAnimation(DirectAttack, false);
+        GetWorldTimerManager().SetTimer(RestoreAnimationTimer, this,
+            &ThisClass::RestoreAnimationBlueprint, FMath::Max(0.05f, DirectAttack->GetPlayLength()), false);
+    }
+    else if (UAnimMontage* AttackMontage = Data->ZombieAttackMontage.LoadSynchronous())
+    {
+        GetMesh()->PlayAnimation(AttackMontage, false);
+        GetWorldTimerManager().SetTimer(RestoreAnimationTimer, this,
+            &ThisClass::RestoreAnimationBlueprint, FMath::Max(0.05f, AttackMontage->GetPlayLength()), false);
     }
     BP_OnZombieAttack();
+}
+
+void AZombieCharacter::RestoreAnimationBlueprint()
+{
+    if (!GetMesh() || bIsDead)
+    {
+        return;
+    }
+    if (UClass* AnimationClass = UGlobalGameData::Get(this)->ZombieAnimationClass.LoadSynchronous())
+    {
+        GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+        GetMesh()->SetAnimInstanceClass(AnimationClass);
+    }
 }
 
 void AZombieCharacter::MulticastDied_Implementation()

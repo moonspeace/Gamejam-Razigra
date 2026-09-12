@@ -6,6 +6,10 @@
 
 class USpringArmComponent;
 class UCameraComponent;
+class UMaterialInstanceDynamic;
+class UStaticMeshComponent;
+class UTextBlock;
+class UWidgetComponent;
 
 UENUM(BlueprintType)
 enum class EConsensusAction : uint8
@@ -40,6 +44,13 @@ public:
     void SubmitParticipantLook(int32 ParticipantIndex, const FVector2D& LookDelta);
     void ResetParticipant(int32 ParticipantIndex);
     void SetRequiredConsensusParticipants(int32 NewRequiredCount);
+    void SetParticipantAbility(int32 ParticipantIndex, bool bPressed);
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
+    bool IsHealingActive() const { return bHealingActive; }
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
+    bool IsShieldActive() const { return bShieldActive; }
 
     UFUNCTION(BlueprintPure, Category="Razigra|Animation")
     bool IsCharacterCrouching() const { return bIsCrouched; }
@@ -96,15 +107,30 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Damaged"))
     void BP_OnHeroDamaged(float DamageAmount);
 
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Abilities", meta=(DisplayName="On Healing State Changed"))
+    void BP_OnHealingStateChanged(bool bActive);
+
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Abilities", meta=(DisplayName="On Shield State Changed"))
+    void BP_OnShieldStateChanged(bool bActive);
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     TObjectPtr<USpringArmComponent> CameraBoom;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     TObjectPtr<UCameraComponent> FollowCamera;
 
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities")
+    TObjectPtr<UStaticMeshComponent> ShieldMesh;
+
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Abilities")
+    TArray<TObjectPtr<UStaticMeshComponent>> HealingEffectMeshes;
+
 protected:
     UFUNCTION()
     void OnRep_AimRotation();
+
+    UFUNCTION()
+    void OnRep_AbilityState();
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastGunFired(const FVector_NetQuantize& MuzzleLocation, const FVector_NetQuantize& ImpactPoint,
@@ -128,6 +154,7 @@ private:
     bool bWasJumpConsensus = false;
     double NextFireTime = 0.0;
     double FiringVisualUntil = 0.0;
+    float AbilityVisualTime = 0.0f;
 
     UPROPERTY(Replicated)
     int32 RequiredConsensusParticipants = 2;
@@ -157,6 +184,18 @@ private:
     UPROPERTY(Replicated)
     bool bIsDead = false;
 
+    UPROPERTY(ReplicatedUsing=OnRep_AbilityState)
+    bool bHealingActive = false;
+
+    UPROPERTY(ReplicatedUsing=OnRep_AbilityState)
+    bool bShieldActive = false;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> ShieldDynamicMaterial;
+
+    UPROPERTY(Transient)
+    TObjectPtr<UMaterialInstanceDynamic> HealingDynamicMaterial;
+
     bool HasConsensus(EConsensusAction Action) const;
     void EnsureVisibleMesh();
     void ConfigureCamera();
@@ -165,4 +204,5 @@ private:
     void ProcessLook();
     void ProcessActions();
     void FireGun();
+    void ConfigureAbilityVisuals();
 };

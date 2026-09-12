@@ -40,12 +40,21 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra")
     int32 GetPlayerSlot() const { return PlayerSlot; }
 
+    UFUNCTION(BlueprintPure, Category="Razigra")
+    int32 GetDisplayedRole() const;
+
 protected:
     UFUNCTION(Server, Reliable)
     void ServerSetAction(EConsensusAction Action, bool bPressed);
 
     UFUNCTION(Server, Unreliable)
     void ServerSubmitLook(FVector2D LookDelta);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSetRoleAbility(bool bPressed);
+
+    UFUNCTION(Server, Reliable)
+    void ServerSwitchSoloRole();
 
     UFUNCTION(Server, Reliable)
     void ServerRequestRestartRun();
@@ -61,6 +70,9 @@ private:
 
     UPROPERTY(ReplicatedUsing=OnRep_PlayerSlot)
     int32 PlayerSlot = INDEX_NONE;
+
+    UPROPERTY(Replicated)
+    int32 SoloAbilityRole = 0;
 
     UPROPERTY()
     TObjectPtr<ASharedHeroCharacter> SharedHero;
@@ -90,6 +102,9 @@ private:
     void CrouchReleased();
     void FirePressed();
     void FireReleased();
+    void AbilityPressed();
+    void AbilityReleased();
+    void SwitchSoloRole();
     void LookX(float Value);
     void LookY(float Value);
 };
