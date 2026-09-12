@@ -37,7 +37,11 @@ All connection and error messages are reported in the menu; nothing is drawn as 
 
 ## In-game HUD
 
-`UCoopHudWidget` is created automatically for each local player when the shared hero appears. It lists every consensus action (W / A / S / D / Space / Ctrl / LMB) and colours each card by who is holding it: red for player one, blue for player two, green once both agree. Colours, blend speed, and the panel tint are exposed under **Zombie Zero|HUD Style**; set `GlobalGameData.GameplayHudWidgetClass` to a Blueprint child to restyle it.
+`UCoopHudWidget` is created automatically for each local player when the shared hero appears. Key caps are laid out the way they sit on a keyboard (W above A S D, Space above Ctrl, LMB above Mouse) and each is coloured by who is holding it: red for player one, blue for player two, green once both agree. The two numbered swatches on the right say which player you are — yours is solid, the other is dimmed. The HUD carries no explanatory text by design. Colours, blend speed, and the panel tint are exposed under **Zombie Zero|HUD Style**; set `GlobalGameData.GameplayHudWidgetClass` to a Blueprint child to restyle it.
+
+Aiming is a consensus action too. Both players' mouse deltas must arrive within `LookInputGraceSeconds` of each other, and they are then **summed** rather than averaged, so pulling in opposite directions cancels out and pulling together turns twice as fast. The `MOUSE` card lights up per player the same way the key caps do.
+
+While a player is waiting for the others, the view is held on black and fades up over `GlobalGameData.GameplayFadeInSeconds` the moment the shared hero appears.
 
 ## Testing the consensus mechanic
 

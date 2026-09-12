@@ -1,5 +1,6 @@
 #include "CoopPlayerController.h"
 
+#include "Camera/PlayerCameraManager.h"
 #include "CoopGameState.h"
 #include "CoopHudWidget.h"
 #include "EOSSessionSubsystem.h"
@@ -13,6 +14,34 @@ ACoopPlayerController::ACoopPlayerController()
 {
     bAutoManageActiveCameraTarget = false;
     PrimaryActorTick.bCanEverTick = true;
+}
+
+void ACoopPlayerController::BeginPlay()
+{
+    Super::BeginPlay();
+    if (IsLocalController())
+    {
+        // Nothing to look at until the shared hero exists, so sit on black rather than showing
+        // an empty level while the other player is still connecting.
+        HoldScreenBlack();
+    }
+}
+
+void ACoopPlayerController::HoldScreenBlack()
+{
+    if (PlayerCameraManager)
+    {
+        PlayerCameraManager->SetManualCameraFade(1.0f, FLinearColor::Black, false);
+    }
+}
+
+void ACoopPlayerController::FadeScreenIn()
+{
+    if (PlayerCameraManager)
+    {
+        PlayerCameraManager->StartCameraFade(1.0f, 0.0f,
+            UGlobalGameData::Get(this)->GameplayFadeInSeconds, FLinearColor::Black, false, false);
+    }
 }
 
 void ACoopPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
@@ -104,6 +133,7 @@ void ACoopPlayerController::BindToSharedHero(ASharedHeroCharacter* Hero)
         }
     }
     ShowGameplayHud();
+    FadeScreenIn();
 }
 
 void ACoopPlayerController::ShowGameplayHud()

@@ -180,9 +180,14 @@ void ASharedHeroCharacter::SubmitParticipantLook(int32 ParticipantIndex, const F
     {
         return;
     }
+    const double Now = GetWorld()->GetTimeSeconds();
     PendingLook[ParticipantIndex] = LookDelta.GetClampedToMaxSize(50.0f);
-    LookReceivedAt[ParticipantIndex] = GetWorld()->GetTimeSeconds();
+    LookReceivedAt[ParticipantIndex] = Now;
     bLookPending[ParticipantIndex] = true;
+    // Held a little longer than the consensus grace so the HUD light does not strobe while
+    // a player keeps the mouse moving.
+    LookActiveUntil[ParticipantIndex] = Now + FMath::Max(
+        UGlobalGameData::Get(this)->LookInputGraceSeconds, 0.15f);
 }
 
 void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
@@ -196,6 +201,7 @@ void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
         ParticipantActions[ParticipantIndex][ActionIndex] = false;
     }
     bLookPending[ParticipantIndex] = false;
+    LookActiveUntil[ParticipantIndex] = 0.0;
     RefreshActionMasks();
 }
 
@@ -231,6 +237,14 @@ void ASharedHeroCharacter::ProcessLook()
         }
     }
 
+    // Publish who is currently steering so the HUD can colour the mouse card.
+    const int32 LookActionIndex = static_cast<int32>(EConsensusAction::Look);
+    for (int32 Index = 0; Index < ParticipantCount; ++Index)
+    {
+        ParticipantActions[Index][LookActionIndex] = Now < LookActiveUntil[Index];
+    }
+    RefreshActionMasks();
+
     bool bAllLookInputsReady = true;
     FVector2D Combined = FVector2D::ZeroVector;
     for (int32 Index = 0; Index < RequiredConsensusParticipants; ++Index)
@@ -241,7 +255,9 @@ void ASharedHeroCharacter::ProcessLook()
 
     if (bAllLookInputsReady)
     {
-        Combined *= Data->LookSensitivity / static_cast<float>(RequiredConsensusParticipants);
+        // Both deltas are summed, not averaged: aiming is the two players' contributions added
+        // together, so pulling in opposite directions cancels out.
+        Combined *= Data->LookSensitivity;
         AimRotation.Yaw = FRotator::NormalizeAxis(AimRotation.Yaw + Combined.X);
         AimRotation.Pitch = FMath::Clamp(AimRotation.Pitch - Combined.Y, -70.0f, 60.0f);
         for (int32 Index = 0; Index < RequiredConsensusParticipants; ++Index)

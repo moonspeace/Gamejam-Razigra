@@ -17,6 +17,7 @@ class GAMEJAMRAZIGRA_API ACoopPlayerController : public APlayerController
 public:
     ACoopPlayerController();
 
+    virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void PlayerTick(float DeltaTime) override;
     virtual void SetupInputComponent() override;
@@ -58,6 +59,8 @@ private:
     FVector2D PendingLookInput = FVector2D::ZeroVector;
     float SharedHeroSearchTime = 0.0f;
 
+    void HoldScreenBlack();
+    void FadeScreenIn();
     void ShowGameplayHud();
     void HideGameplayHud();
     void SetAction(EConsensusAction Action, bool bPressed);

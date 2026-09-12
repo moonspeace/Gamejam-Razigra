@@ -17,6 +17,7 @@ enum class EConsensusAction : uint8
     Jump,
     Crouch,
     Fire,
+    Look,
     MAX UMETA(Hidden)
 };
 
@@ -103,6 +104,7 @@ private:
     bool ParticipantActions[ParticipantCount][ActionCount] = {};
     FVector2D PendingLook[ParticipantCount] = {};
     double LookReceivedAt[ParticipantCount] = {};
+    double LookActiveUntil[ParticipantCount] = {};
     bool bLookPending[ParticipantCount] = {};
     bool bWasJumpConsensus = false;
     double NextFireTime = 0.0;

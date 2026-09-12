@@ -8,11 +8,12 @@
 class UBorder;
 class UHorizontalBox;
 class UTextBlock;
+class UVerticalBox;
 
 /**
- * In-game consensus readout. Every shared action is drawn as a key card that lights up
- * red for player one, blue for player two, and green once both players agree.
- * Built entirely in C++; Blueprint subclasses may replace the visuals.
+ * In-game consensus readout. Every shared input is a key cap laid out the way it sits on a
+ * keyboard, lit red for player one, blue for player two and green once both agree. Deliberately
+ * wordless: colour and key letters carry the whole message.
  */
 UCLASS(Blueprintable)
 class GAMEJAMRAZIGRA_API UCoopHudWidget : public UUserWidget
@@ -52,16 +53,15 @@ private:
     TArray<TObjectPtr<UTextBlock>> ActionKeyLabels;
 
     UPROPERTY()
-    TArray<TObjectPtr<UTextBlock>> ActionNameLabels;
-
-    UPROPERTY()
-    TObjectPtr<UTextBlock> LocalPlayerLabel;
+    TArray<TObjectPtr<UBorder>> LegendChips;
 
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
 
-    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText, const FString& NameText);
-    UWidget* BuildLegendEntry(const FString& Tag, const FString& Text, const FLinearColor& Color);
+    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width);
+    UWidget* BuildMovementCluster();
+    UWidget* BuildStackedCluster(const FString& Tag, UWidget* Top, UWidget* Bottom);
+    UWidget* BuildLegend();
     ASharedHeroCharacter* ResolveSharedHero() const;
     int32 ResolveLocalParticipantIndex() const;
 };

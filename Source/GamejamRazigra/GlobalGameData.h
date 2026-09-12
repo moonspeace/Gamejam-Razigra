@@ -49,6 +49,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Maps", meta=(AllowedClasses="/Script/Engine.World"))
     TSoftObjectPtr<UWorld> GameplayMap;
 
+    /** Seconds the screen takes to fade up from black once the match starts. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(ClampMin="0"))
+    float GameplayFadeInSeconds = 0.9f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftObjectPtr<USkeletalMesh> ZombieMesh;
 
