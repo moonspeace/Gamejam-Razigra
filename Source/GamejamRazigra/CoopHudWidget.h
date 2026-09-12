@@ -7,6 +7,7 @@
 
 class UBorder;
 class UHorizontalBox;
+class UProgressBar;
 class UTextBlock;
 class UVerticalBox;
 
@@ -35,9 +36,6 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style")
     FLinearColor IdleColor;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style")
-    FLinearColor PanelColor;
-
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style", meta=(ClampMin="0.1"))
     float ColorBlendSpeed;
 
@@ -55,12 +53,17 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<UBorder>> LegendChips;
 
+    /** Index 0/1 = player one/two horizontal (yaw) meters, then the vertical (pitch) meters. */
+    UPROPERTY()
+    TArray<TObjectPtr<UProgressBar>> AxisMeters;
+
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
 
-    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width);
-    UWidget* BuildMovementCluster();
-    UWidget* BuildStackedCluster(const FString& Tag, UWidget* Top, UWidget* Bottom);
+    UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText);
+    UWidget* BuildKeySpacer(const FString& Tag);
+    UWidget* BuildAxisMeters();
+    UProgressBar* BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color);
     UWidget* BuildLegend();
     ASharedHeroCharacter* ResolveSharedHero() const;
     int32 ResolveLocalParticipantIndex() const;

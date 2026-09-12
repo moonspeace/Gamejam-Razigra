@@ -6,6 +6,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Components/ProgressBar.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
@@ -13,17 +14,19 @@
 #include "CoopGameState.h"
 #include "CoopPlayerController.h"
 #include "Engine/World.h"
+#include "GlobalGameData.h"
 #include "Styling/CoreStyle.h"
 
 namespace RazigraHud
 {
     static const FLinearColor ActiveTextColor(1.0f, 1.0f, 1.0f, 1.0f);
     static const FLinearColor MutedTextColor(0.58f, 0.62f, 0.68f, 1.0f);
+    static const FLinearColor MeterBackgroundColor(0.04f, 0.05f, 0.07f, 0.55f);
     static constexpr float KeyWidth = 52.0f;
-    static constexpr float WideKeyWidth = 116.0f;
-    static constexpr float MouseKeyWidth = 74.0f;
     static constexpr float KeyHeight = 44.0f;
     static constexpr float KeyGap = 3.0f;
+    static constexpr float MeterThickness = 10.0f;
+    static constexpr float MeterLength = 96.0f;
 }
 
 UCoopHudWidget::UCoopHudWidget(const FObjectInitializer& ObjectInitializer)
@@ -32,7 +35,6 @@ UCoopHudWidget::UCoopHudWidget(const FObjectInitializer& ObjectInitializer)
     , PlayerTwoColor(0.09f, 0.45f, 0.95f, 0.95f)
     , ConsensusColor(0.10f, 0.76f, 0.35f, 0.98f)
     , IdleColor(0.05f, 0.06f, 0.08f, 0.78f)
-    , PanelColor(0.02f, 0.025f, 0.035f, 0.78f)
     , ColorBlendSpeed(14.0f)
 {
 }
@@ -48,44 +50,51 @@ void UCoopHudWidget::NativeOnInitialized()
     UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("HudRoot"));
     WidgetTree->RootWidget = Root;
 
-    UBorder* Panel = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("ConsensusPanel"));
-    Panel->SetBrushColor(PanelColor);
-    Panel->SetPadding(FMargin(16.0f, 12.0f));
-    if (UOverlaySlot* PanelSlot = Root->AddChildToOverlay(Panel))
-    {
-        PanelSlot->SetHorizontalAlignment(HAlign_Center);
-        PanelSlot->SetVerticalAlignment(VAlign_Bottom);
-        PanelSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 32.0f));
-    }
-
+    // No panel behind the keys: the key caps are the only chrome.
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HudRow"));
-    Panel->SetContent(Row);
-
-    // Movement keys sit where they sit on the keyboard: W above, A S D beneath it.
-    if (UHorizontalBoxSlot* MoveSlot = Row->AddChildToHorizontalBox(BuildMovementCluster()))
+    if (UOverlaySlot* RowSlot = Root->AddChildToOverlay(Row))
     {
-        MoveSlot->SetVerticalAlignment(VAlign_Center);
-        MoveSlot->SetPadding(FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+        RowSlot->SetHorizontalAlignment(HAlign_Center);
+        RowSlot->SetVerticalAlignment(VAlign_Bottom);
+        RowSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 34.0f));
     }
 
-    // Space over Ctrl, matching the bottom row of the keyboard.
-    UWidget* SpaceKey = BuildActionCard(EConsensusAction::Jump, TEXT("SPACE"), RazigraHud::WideKeyWidth);
-    UWidget* CrouchKey = BuildActionCard(EConsensusAction::Crouch, TEXT("CTRL"), RazigraHud::WideKeyWidth);
-    if (UHorizontalBoxSlot* KeysSlot = Row->AddChildToHorizontalBox(
-        BuildStackedCluster(TEXT("BottomRowKeys"), SpaceKey, CrouchKey)))
+    // Two rows of key caps, positioned the way they sit on a keyboard:
+    //     [W]              [MOUSE]
+    //  [A][S][D]     [CTRL][SPACE][LMB]
+    UVerticalBox* Keyboard = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Keyboard"));
+    if (UHorizontalBoxSlot* KeyboardSlot = Row->AddChildToHorizontalBox(Keyboard))
     {
-        KeysSlot->SetVerticalAlignment(VAlign_Center);
-        KeysSlot->SetPadding(FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+        KeyboardSlot->SetVerticalAlignment(VAlign_Center);
+        KeyboardSlot->SetPadding(FMargin(0.0f, 0.0f, 22.0f, 0.0f));
     }
 
-    // The mouse: click above, aim beneath.
-    UWidget* FireKey = BuildActionCard(EConsensusAction::Fire, TEXT("LMB"), RazigraHud::MouseKeyWidth);
-    UWidget* LookKey = BuildActionCard(EConsensusAction::Look, TEXT("MOUSE"), RazigraHud::MouseKeyWidth);
-    if (UHorizontalBoxSlot* MouseSlot = Row->AddChildToHorizontalBox(
-        BuildStackedCluster(TEXT("MouseKeys"), FireKey, LookKey)))
+    UHorizontalBox* TopRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("TopRow"));
+    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopLeft")));
+    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveForward, TEXT("W")));
+    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopRight")));
+    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopGap")));
+    TopRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadTopMouseLeft")));
+    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Look, TEXT("MOUSE")));
+    if (UVerticalBoxSlot* TopSlot = Keyboard->AddChildToVerticalBox(TopRow))
     {
-        MouseSlot->SetVerticalAlignment(VAlign_Center);
-        MouseSlot->SetPadding(FMargin(0.0f, 0.0f, 18.0f, 0.0f));
+        TopSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, RazigraHud::KeyGap * 2.0f));
+    }
+
+    UHorizontalBox* BottomRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("BottomRow"));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveLeft, TEXT("A")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveBackward, TEXT("S")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveRight, TEXT("D")));
+    BottomRow->AddChildToHorizontalBox(BuildKeySpacer(TEXT("PadBottomGap")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Crouch, TEXT("CTRL")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Jump, TEXT("SPACE")));
+    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::Fire, TEXT("LMB")));
+    Keyboard->AddChildToVerticalBox(BottomRow);
+
+    if (UHorizontalBoxSlot* MeterSlot = Row->AddChildToHorizontalBox(BuildAxisMeters()))
+    {
+        MeterSlot->SetVerticalAlignment(VAlign_Center);
+        MeterSlot->SetPadding(FMargin(0.0f, 0.0f, 18.0f, 0.0f));
     }
 
     if (UHorizontalBoxSlot* LegendSlot = Row->AddChildToHorizontalBox(BuildLegend()))
@@ -94,62 +103,43 @@ void UCoopHudWidget::NativeOnInitialized()
     }
 }
 
-UWidget* UCoopHudWidget::BuildMovementCluster()
+/** An invisible key-sized block, so the two rows line up like a real keyboard. */
+UWidget* UCoopHudWidget::BuildKeySpacer(const FString& Tag)
 {
-    UVerticalBox* Cluster = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("MoveCluster"));
-
-    UHorizontalBox* TopRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("MoveTopRow"));
-    TopRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveForward, TEXT("W"), RazigraHud::KeyWidth));
-    if (UVerticalBoxSlot* TopSlot = Cluster->AddChildToVerticalBox(TopRow))
-    {
-        TopSlot->SetHorizontalAlignment(HAlign_Center);
-        TopSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, RazigraHud::KeyGap * 2.0f));
-    }
-
-    UHorizontalBox* BottomRow = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("MoveBottomRow"));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveLeft, TEXT("A"), RazigraHud::KeyWidth));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveBackward, TEXT("S"), RazigraHud::KeyWidth));
-    BottomRow->AddChildToHorizontalBox(BuildActionCard(EConsensusAction::MoveRight, TEXT("D"), RazigraHud::KeyWidth));
-    if (UVerticalBoxSlot* BottomSlot = Cluster->AddChildToVerticalBox(BottomRow))
-    {
-        BottomSlot->SetHorizontalAlignment(HAlign_Center);
-    }
-    return Cluster;
+    USizeBox* Spacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *Tag);
+    Spacer->SetWidthOverride(RazigraHud::KeyWidth + RazigraHud::KeyGap * 2.0f);
+    Spacer->SetHeightOverride(RazigraHud::KeyHeight);
+    return Spacer;
 }
 
-UWidget* UCoopHudWidget::BuildStackedCluster(const FString& Tag, UWidget* Top, UWidget* Bottom)
-{
-    UVerticalBox* Cluster = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), *Tag);
-    if (UVerticalBoxSlot* TopSlot = Cluster->AddChildToVerticalBox(Top))
-    {
-        TopSlot->SetHorizontalAlignment(HAlign_Center);
-        TopSlot->SetPadding(FMargin(0.0f, 0.0f, 0.0f, RazigraHud::KeyGap * 2.0f));
-    }
-    if (UVerticalBoxSlot* BottomSlot = Cluster->AddChildToVerticalBox(Bottom))
-    {
-        BottomSlot->SetHorizontalAlignment(HAlign_Center);
-    }
-    return Cluster;
-}
-
-UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width)
+UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString& KeyText)
 {
     const FString Tag = FString::Printf(TEXT("Card_%d"), static_cast<int32>(Action));
 
     USizeBox* CardBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), *(Tag + TEXT("Box")));
-    CardBox->SetWidthOverride(Width);
+    CardBox->SetWidthOverride(RazigraHud::KeyWidth);
     CardBox->SetHeightOverride(RazigraHud::KeyHeight);
 
     UBorder* Card = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), *Tag);
     Card->SetBrushColor(IdleColor);
-    Card->SetPadding(FMargin(RazigraHud::KeyGap));
+    Card->SetPadding(FMargin(2.0f));
     Card->SetHorizontalAlignment(HAlign_Center);
     Card->SetVerticalAlignment(VAlign_Center);
     CardBox->SetContent(Card);
 
+    int32 FontSize = 19;
+    if (KeyText.Len() > 3)
+    {
+        FontSize = 10;
+    }
+    else if (KeyText.Len() > 1)
+    {
+        FontSize = 13;
+    }
+
     UTextBlock* Key = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *(Tag + TEXT("Key")));
     Key->SetText(FText::FromString(KeyText));
-    Key->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), KeyText.Len() > 1 ? 12 : 19));
+    Key->SetFont(FCoreStyle::GetDefaultFontStyle(TEXT("Bold"), FontSize));
     Key->SetJustification(ETextJustify::Center);
     Key->SetColorAndOpacity(FSlateColor(RazigraHud::MutedTextColor));
     Card->SetContent(Key);
@@ -165,6 +155,65 @@ UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString&
         WrapperSlot->SetPadding(FMargin(RazigraHud::KeyGap, 0.0f));
     }
     return Wrapper;
+}
+
+UProgressBar* UCoopHudWidget::BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color)
+{
+    UProgressBar* Meter = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), *Tag);
+    Meter->WidgetStyle.BackgroundImage.TintColor = FSlateColor(RazigraHud::MeterBackgroundColor);
+    Meter->WidgetStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
+    Meter->BarFillType = bVertical ? EProgressBarFillType::BottomToTop : EProgressBarFillType::LeftToRight;
+    Meter->SetFillColorAndOpacity(Color);
+    // Half full is the neutral resting point, so the fill edge reads as a needle.
+    Meter->SetPercent(0.5f);
+    AxisMeters.Add(Meter);
+    return Meter;
+}
+
+/**
+ * Four meters: a horizontal pair stacked (yaw, player one over player two) and a vertical pair
+ * side by side (pitch). Both players' contributions are visible at once, which is what makes the
+ * summed aim readable.
+ */
+UWidget* UCoopHudWidget::BuildAxisMeters()
+{
+    UHorizontalBox* Meters = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("AxisMeters"));
+
+    UVerticalBox* Horizontals = WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("YawMeters"));
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),
+            *FString::Printf(TEXT("YawBox_%d"), Index));
+        Box->SetWidthOverride(RazigraHud::MeterLength);
+        Box->SetHeightOverride(RazigraHud::MeterThickness);
+        Box->SetContent(BuildMeter(FString::Printf(TEXT("YawMeter_%d"), Index), false,
+            Index == 0 ? PlayerOneColor : PlayerTwoColor));
+        if (UVerticalBoxSlot* BoxSlot = Horizontals->AddChildToVerticalBox(Box))
+        {
+            BoxSlot->SetPadding(FMargin(0.0f, RazigraHud::KeyGap));
+        }
+    }
+    if (UHorizontalBoxSlot* HorizontalSlot = Meters->AddChildToHorizontalBox(Horizontals))
+    {
+        HorizontalSlot->SetVerticalAlignment(VAlign_Center);
+        HorizontalSlot->SetPadding(FMargin(0.0f, 0.0f, 10.0f, 0.0f));
+    }
+
+    for (int32 Index = 0; Index < 2; ++Index)
+    {
+        USizeBox* Box = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),
+            *FString::Printf(TEXT("PitchBox_%d"), Index));
+        Box->SetWidthOverride(RazigraHud::MeterThickness);
+        Box->SetHeightOverride(RazigraHud::KeyHeight * 2.0f);
+        Box->SetContent(BuildMeter(FString::Printf(TEXT("PitchMeter_%d"), Index), true,
+            Index == 0 ? PlayerOneColor : PlayerTwoColor));
+        if (UHorizontalBoxSlot* BoxSlot = Meters->AddChildToHorizontalBox(Box))
+        {
+            BoxSlot->SetVerticalAlignment(VAlign_Center);
+            BoxSlot->SetPadding(FMargin(RazigraHud::KeyGap, 0.0f));
+        }
+    }
+    return Meters;
 }
 
 /** Two numbered swatches. The local player's is solid, the other is dimmed: no caption needed. */
@@ -242,6 +291,24 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             }
             Chip->SetBrushColor(ChipColor);
         }
+    }
+
+    // Axis meters. 0.5 is centre; the fill edge swings either side of it with the mouse delta.
+    const float MeterRange = FMath::Max(0.01f, UGlobalGameData::Get(this)->LookMeterRange);
+    for (int32 Index = 0; Index < AxisMeters.Num(); ++Index)
+    {
+        UProgressBar* Meter = AxisMeters[Index];
+        if (!Meter)
+        {
+            continue;
+        }
+        const int32 Participant = Index % 2;
+        const bool bVertical = Index >= 2;
+        const FVector2D Axis = Hero ? Hero->GetParticipantLookAxis(Participant) : FVector2D::ZeroVector;
+        // Screen-space pitch is inverted relative to the raw axis, so up on the mouse reads as up.
+        const float Value = bVertical ? -Axis.Y : Axis.X;
+        const float Target = 0.5f + 0.5f * FMath::Clamp(Value / MeterRange, -1.0f, 1.0f);
+        Meter->SetPercent(FMath::FInterpTo(Meter->GetPercent(), Target, InDeltaTime, ColorBlendSpeed));
     }
 
     for (int32 Index = 0; Index < ActionCards.Num(); ++Index)

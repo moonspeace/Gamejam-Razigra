@@ -75,8 +75,20 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Consensus")
     int32 GetRequiredConsensusParticipants() const { return RequiredConsensusParticipants; }
 
+    /** That participant's current mouse delta, replicated so the HUD can meter both players. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Consensus")
+    FVector2D GetParticipantLookAxis(int32 ParticipantIndex) const;
+
+    /** Where shots visually originate: the weapon muzzle socket, or the camera if it is absent. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Weapon")
+    FVector GetMuzzleLocation() const;
+
+    /**
+     * Override in a Blueprint child of this class to add muzzle flashes, tracers, sounds,
+     * camera shakes, decals and so on. Runs on every machine, server and clients alike.
+     */
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Weapon", meta=(DisplayName="On Gun Fired"))
-    void BP_OnGunFired(const FVector& TraceStart, const FVector& TraceEnd, bool bHit);
+    void BP_OnGunFired(const FVector& MuzzleLocation, const FVector& ImpactPoint, bool bHit, AActor* HitActor);
 
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Died"))
     void BP_OnHeroDied();
@@ -92,7 +104,8 @@ protected:
     void OnRep_AimRotation();
 
     UFUNCTION(NetMulticast, Unreliable)
-    void MulticastGunFired(const FVector_NetQuantize& TraceStart, const FVector_NetQuantize& TraceEnd, bool bHit);
+    void MulticastGunFired(const FVector_NetQuantize& MuzzleLocation, const FVector_NetQuantize& ImpactPoint,
+        bool bHit, AActor* HitActor);
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastHeroDied();
@@ -119,6 +132,12 @@ private:
 
     UPROPERTY(Replicated)
     int32 PlayerTwoActionMask = 0;
+
+    UPROPERTY(Replicated)
+    FVector2D PlayerOneLookAxis = FVector2D::ZeroVector;
+
+    UPROPERTY(Replicated)
+    FVector2D PlayerTwoLookAxis = FVector2D::ZeroVector;
 
     UPROPERTY(ReplicatedUsing=OnRep_AimRotation)
     FRotator AimRotation;

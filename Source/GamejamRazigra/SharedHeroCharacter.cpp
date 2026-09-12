@@ -155,6 +155,16 @@ void ASharedHeroCharacter::RefreshActionMasks()
     PlayerTwoActionMask = Masks[1];
 }
 
+FVector2D ASharedHeroCharacter::GetParticipantLookAxis(int32 ParticipantIndex) const
+{
+    switch (ParticipantIndex)
+    {
+    case 0: return PlayerOneLookAxis;
+    case 1: return PlayerTwoLookAxis;
+    default: return FVector2D::ZeroVector;
+    }
+}
+
 int32 ASharedHeroCharacter::GetParticipantActionMask(int32 ParticipantIndex) const
 {
     switch (ParticipantIndex)
@@ -237,12 +247,18 @@ void ASharedHeroCharacter::ProcessLook()
         }
     }
 
-    // Publish who is currently steering so the HUD can colour the mouse card.
+    // Publish who is steering, and by how much, so the HUD can light the card and drive the
+    // axis meters. Both are cleared as soon as a player stops moving the mouse.
     const int32 LookActionIndex = static_cast<int32>(EConsensusAction::Look);
+    FVector2D LiveAxes[ParticipantCount] = {};
     for (int32 Index = 0; Index < ParticipantCount; ++Index)
     {
-        ParticipantActions[Index][LookActionIndex] = Now < LookActiveUntil[Index];
+        const bool bSteering = Now < LookActiveUntil[Index];
+        ParticipantActions[Index][LookActionIndex] = bSteering;
+        LiveAxes[Index] = bSteering ? PendingLook[Index] : FVector2D::ZeroVector;
     }
+    PlayerOneLookAxis = LiveAxes[0];
+    PlayerTwoLookAxis = LiveAxes[1];
     RefreshActionMasks();
 
     bool bAllLookInputsReady = true;
@@ -311,19 +327,34 @@ void ASharedHeroCharacter::FireGun()
     FCollisionQueryParams Params(SCENE_QUERY_STAT(RazigraGun), true, this);
     const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
     const FVector FinalEnd = bHit ? Hit.ImpactPoint : TraceEnd;
+    AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
 
-    if (bHit && IsValid(Hit.GetActor()))
+    if (IsValid(HitActor))
     {
-        UGameplayStatics::ApplyPointDamage(Hit.GetActor(), Data->FireDamage, AimRotation.Vector(), Hit,
+        UGameplayStatics::ApplyPointDamage(HitActor, Data->FireDamage, AimRotation.Vector(), Hit,
             nullptr, this, UDamageType::StaticClass());
     }
-    MulticastGunFired(TraceStart, FinalEnd, bHit);
+    // Effects hang off the muzzle, not the camera, so a Blueprint child can attach them to the mesh.
+    MulticastGunFired(GetMuzzleLocation(), FinalEnd, bHit, HitActor);
 }
 
-void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQuantize& TraceStart,
-    const FVector_NetQuantize& TraceEnd, bool bHit)
+FVector ASharedHeroCharacter::GetMuzzleLocation() const
 {
-    BP_OnGunFired(TraceStart, TraceEnd, bHit);
+    const FName MuzzleSocket = UGlobalGameData::Get(this)->MuzzleSocketName;
+    if (const USkeletalMeshComponent* MeshComponent = GetMesh())
+    {
+        if (!MuzzleSocket.IsNone() && MeshComponent->DoesSocketExist(MuzzleSocket))
+        {
+            return MeshComponent->GetSocketLocation(MuzzleSocket);
+        }
+    }
+    return FollowCamera ? FollowCamera->GetComponentLocation() : GetActorLocation();
+}
+
+void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQuantize& MuzzleLocation,
+    const FVector_NetQuantize& ImpactPoint, bool bHit, AActor* HitActor)
+{
+    BP_OnGunFired(MuzzleLocation, ImpactPoint, bHit, HitActor);
 }
 
 float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
@@ -385,4 +416,6 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerOneActionMask);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoActionMask);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerOneLookAxis);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoLookAxis);
 }

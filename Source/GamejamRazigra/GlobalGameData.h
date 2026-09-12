@@ -77,6 +77,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0.01"))
     float LookInputGraceSeconds = 0.12f;
 
+    /** Mouse delta that fills a HUD axis meter end to end. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0.01"))
+    float LookMeterRange = 8.0f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon", meta=(ClampMin="0"))
     float FireDamage = 25.0f;
 
