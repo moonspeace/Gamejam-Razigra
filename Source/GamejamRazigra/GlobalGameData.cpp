@@ -1,5 +1,6 @@
 #include "GlobalGameData.h"
 
+#include "CoopHudWidget.h"
 #include "CoopMenuWidget.h"
 #include "SharedHeroCharacter.h"
 #include "ZombieCharacter.h"
@@ -8,18 +9,29 @@
 namespace RazigraData
 {
     static const TCHAR* AssetPath = TEXT("/Game/Data/GlobalGameData.GlobalGameData");
+    static const TCHAR* DefaultHeroBlueprintPath = TEXT("/Game/Blueprints/BP_SharedHero.BP_SharedHero_C");
 }
 
 UGlobalGameData::UGlobalGameData()
 {
-    HeroClass = ASharedHeroCharacter::StaticClass();
+    HeroBlueprint = TSoftClassPtr<ASharedHeroCharacter>(FSoftObjectPath(RazigraData::DefaultHeroBlueprintPath));
     ZombieClass = AZombieCharacter::StaticClass();
     MainMenuWidgetClass = UCoopMenuWidget::StaticClass();
+    GameplayHudWidgetClass = UCoopHudWidget::StaticClass();
     GameplayMap = TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson.Lvl_ThirdPerson")));
-    HeroMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Meshes/SKM_Manny_Simple.SKM_Manny_Simple")));
-    HeroAnimationClass = TSoftClassPtr<UAnimInstance>(FSoftObjectPath(TEXT("/Game/Characters/Mannequins/Anims/Unarmed/ABP_Unarmed.ABP_Unarmed_C")));
     ZombieMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/ZombieMale_AAB/Meshes/SKM_ZombieM_Male_WholeBody.SKM_ZombieM_Male_WholeBody")));
     ZombieAnimationClass = TSoftClassPtr<UAnimInstance>(FSoftObjectPath(TEXT("/Game/ZombieMale_AAB/Animations/ABP_Zombie.ABP_Zombie_C")));
+}
+
+TSubclassOf<ASharedHeroCharacter> UGlobalGameData::GetHeroClass() const
+{
+    if (UClass* HeroClass = HeroBlueprint.LoadSynchronous())
+    {
+        return HeroClass;
+    }
+    UE_LOG(LogRazigra, Warning,
+        TEXT("GlobalGameData.HeroBlueprint is not set (or failed to load); spawning the plain C++ hero, which has no mesh."));
+    return ASharedHeroCharacter::StaticClass();
 }
 
 const UGlobalGameData* UGlobalGameData::Get(const UObject* WorldContextObject)

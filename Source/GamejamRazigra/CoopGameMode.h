@@ -30,6 +30,7 @@ private:
     TMap<TWeakObjectPtr<ACoopPlayerController>, int32> AssignedSlots;
 
     bool CanStartGameplay() const;
+    int32 GetRequiredPlayers() const;
     void RegisterPlayer(ACoopPlayerController* CoopController);
     void EnsureSharedHero();
     int32 AllocateSlot() const;

@@ -46,7 +46,13 @@ private:
     UPROPERTY()
     TObjectPtr<UButton> SinglePlayerButton;
 
+    UPROPERTY()
+    TObjectPtr<UTextBlock> Subtitle;
+
     TArray<FString> StatusHistory;
+
+    /** Hides the launch buttons while the session is waiting for the other player. */
+    void ApplyLobbyMode();
 
     UFUNCTION()
     void HandleHostClicked();

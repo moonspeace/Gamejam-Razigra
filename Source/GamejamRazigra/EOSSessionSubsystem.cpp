@@ -10,6 +10,7 @@
 #include "GlobalGameData.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Misc/ConfigCacheIni.h"
+#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystem.h"
@@ -140,11 +141,8 @@ void UEOSSessionSubsystem::BroadcastStatus(const FString& Status)
 {
     LastStatus = Status;
     UE_LOG(LogRazigra, Log, TEXT("Session: %s"), *Status);
+    // Status is surfaced through the menu/HUD widgets only; nothing is drawn over the game.
     OnStatusChanged.Broadcast(Status);
-    if (GEngine)
-    {
-        GEngine->AddOnScreenDebugMessage(7070, 20.0f, FColor::Cyan, Status);
-    }
 }
 
 void UEOSSessionSubsystem::HostGame()
@@ -160,9 +158,68 @@ void UEOSSessionSubsystem::FindAndJoinGame()
 void UEOSSessionSubsystem::StartSinglePlayer()
 {
     BroadcastStatus(TEXT("Starting single-player test game..."));
+    bWaitingForPlayer = false;
+    ConnectedPlayers = 1;
+    ExpectedPlayers = 1;
     BeginGameplayTravel(true);
-    const FString Map = UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
-    UGameplayStatics::OpenLevel(this, FName(*Map), true);
+    UGameplayStatics::OpenLevel(this, FName(*GetGameplayMapName()), true);
+}
+
+FString UEOSSessionSubsystem::GetGameplayMapName() const
+{
+    return UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
+}
+
+bool UEOSSessionSubsystem::IsOnGameplayMap() const
+{
+    const UWorld* World = GetWorld();
+    if (!World)
+    {
+        return false;
+    }
+    const FString Current = UWorld::RemovePIEPrefix(World->GetMapName());
+    const FString Gameplay = FPackageName::GetShortName(GetGameplayMapName());
+    return !Gameplay.IsEmpty() && Current.Equals(Gameplay, ESearchCase::IgnoreCase);
+}
+
+/**
+ * Opens the current map for connections without travelling anywhere. The host stays in the
+ * front end, advertising the session, until every player has joined.
+ */
+bool UEOSSessionSubsystem::StartListening()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return false;
+    }
+    if (World->GetNetMode() == NM_ListenServer || World->GetNetMode() == NM_DedicatedServer)
+    {
+        return true;
+    }
+
+    FURL ListenURL(nullptr, TEXT(""), TRAVEL_Absolute);
+    ListenURL.AddOption(TEXT("listen"));
+    if (!World->Listen(ListenURL))
+    {
+        return false;
+    }
+    World->URL.AddOption(TEXT("listen"));
+    UE_LOG(LogRazigra, Log, TEXT("Lobby is listening on map %s; waiting for players before travelling."),
+        *World->GetMapName());
+    return true;
+}
+
+void UEOSSessionSubsystem::TravelToGameplayMap()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+    const FString Map = GetGameplayMapName();
+    UE_LOG(LogRazigra, Log, TEXT("All players connected; travelling to %s."), *Map);
+    World->ServerTravel(Map + TEXT("?listen"));
 }
 
 void UEOSSessionSubsystem::BeginGameplayTravel(bool bSinglePlayer, bool bHideMenu)
@@ -349,12 +406,21 @@ void UEOSSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool b
     }
 
     bWaitingForPlayer = true;
-    BroadcastStatus(TEXT("Session created. Waiting for another player... (1/2 connected)"));
-    BeginGameplayTravel(false, false);
-    const FString Map = UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
-    UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; opening listen map %s while waiting for player 2."),
-        *SessionName.ToString(), *Map);
-    GetWorld()->ServerTravel(Map + TEXT("?listen"));
+    bSinglePlayerMode = false;
+    ExpectedPlayers = UGlobalGameData::Get(this)->RequiredPlayers;
+    ConnectedPlayers = FMath::Max(1, ConnectedPlayers);
+
+    if (!StartListening())
+    {
+        bWaitingForPlayer = false;
+        BroadcastStatus(TEXT("Could not open this machine for connections. Check the net driver configuration."));
+        return;
+    }
+
+    UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; holding the lobby until %d players are connected."),
+        *SessionName.ToString(), ExpectedPlayers);
+    BroadcastStatus(FString::Printf(TEXT("Session created. Waiting for players... (%d/%d connected)"),
+        ConnectedPlayers, ExpectedPlayers));
 }
 
 void UEOSSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
@@ -423,35 +489,75 @@ void UEOSSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinS
     }
     if (APlayerController* Controller = GetGameInstance()->GetFirstLocalPlayerController())
     {
-        BroadcastStatus(TEXT("Connected. Loading the game..."));
+        BroadcastStatus(TEXT("Connected. Waiting for every player to be ready..."));
+        bWaitingForPlayer = true;
+        bSinglePlayerMode = false;
+        ExpectedPlayers = UGlobalGameData::Get(this)->RequiredPlayers;
+        // Drop the front end before travelling; it is rebuilt against the new player
+        // controller on the other side, and removed for good once the match starts.
         BeginGameplayTravel(false);
         Controller->ClientTravel(ConnectString, TRAVEL_Absolute);
     }
 }
 
-void UEOSSessionSubsystem::NotifyPlayerCountChanged(int32 ConnectedPlayers, int32 RequiredPlayers)
+void UEOSSessionSubsystem::NotifyPlayerCountChanged(int32 InConnectedPlayers, int32 InRequiredPlayers)
 {
+    ConnectedPlayers = InConnectedPlayers;
+    ExpectedPlayers = FMath::Max(1, InRequiredPlayers);
     UE_LOG(LogRazigra, Log, TEXT("Connected player count changed: %d/%d (waiting=%s)."), ConnectedPlayers,
-        RequiredPlayers, bWaitingForPlayer ? TEXT("true") : TEXT("false"));
+        ExpectedPlayers, bWaitingForPlayer ? TEXT("true") : TEXT("false"));
     if (!bWaitingForPlayer)
     {
         return;
     }
 
-    if (ConnectedPlayers >= RequiredPlayers)
+    if (ConnectedPlayers >= ExpectedPlayers)
     {
         bWaitingForPlayer = false;
-        BroadcastStatus(FString::Printf(TEXT("Player connected. Starting Zombie Zero... (%d/%d)"),
-            ConnectedPlayers, RequiredPlayers));
-        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
-        {
-            RazigraInstance->HideMainMenu();
-        }
+        BroadcastStatus(FString::Printf(TEXT("All players connected (%d/%d). Loading the map..."),
+            ConnectedPlayers, ExpectedPlayers));
+        BeginGameplayTravel(false);
+        TravelToGameplayMap();
     }
     else
     {
         BroadcastStatus(FString::Printf(TEXT("Waiting for another player... (%d/%d connected)"),
-            ConnectedPlayers, RequiredPlayers));
+            ConnectedPlayers, ExpectedPlayers));
+    }
+}
+
+void UEOSSessionSubsystem::ReportLobbyPopulation(int32 InConnectedPlayers, int32 InRequiredPlayers)
+{
+    if (!bWaitingForPlayer)
+    {
+        return;
+    }
+    const int32 Required = FMath::Max(1, InRequiredPlayers);
+    if (ConnectedPlayers == InConnectedPlayers && ExpectedPlayers == Required)
+    {
+        return;
+    }
+    ConnectedPlayers = InConnectedPlayers;
+    ExpectedPlayers = Required;
+    if (ConnectedPlayers >= ExpectedPlayers)
+    {
+        BroadcastStatus(FString::Printf(TEXT("All players connected (%d/%d). Loading the map..."),
+            ConnectedPlayers, ExpectedPlayers));
+    }
+    else
+    {
+        BroadcastStatus(FString::Printf(TEXT("Waiting for another player... (%d/%d connected)"),
+            ConnectedPlayers, ExpectedPlayers));
+    }
+}
+
+void UEOSSessionSubsystem::NotifyGameplayStarted()
+{
+    bWaitingForPlayer = false;
+    bMainMenuRequired = false;
+    if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
+    {
+        RazigraInstance->HideMainMenu();
     }
 }
 

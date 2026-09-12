@@ -2,6 +2,7 @@
 
 #include "CoopMenuWidget.h"
 #include "EOSSessionSubsystem.h"
+#include "Engine/World.h"
 #include "GameFramework/PlayerController.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
@@ -72,4 +73,43 @@ void URazigraGameInstance::HideMainMenu()
 bool URazigraGameInstance::IsMainMenuVisible() const
 {
     return IsValid(MainMenuWidget.Get());
+}
+
+bool URazigraGameInstance::ShouldFrontEndBeVisible() const
+{
+    if (!GetWorld() || GetWorld()->GetNetMode() == NM_DedicatedServer)
+    {
+        return false;
+    }
+    const UEOSSessionSubsystem* Sessions = GetSubsystem<UEOSSessionSubsystem>();
+    if (!Sessions)
+    {
+        return true;
+    }
+    if (Sessions->IsOnGameplayMap())
+    {
+        return false;
+    }
+    return Sessions->ShouldShowMainMenu() || Sessions->IsWaitingForPlayers();
+}
+
+void URazigraGameInstance::RefreshFrontEnd()
+{
+    const bool bWantsFrontEnd = ShouldFrontEndBeVisible();
+    const APlayerController* LocalController = GetFirstLocalPlayerController();
+
+    // A widget built for a controller that has since been replaced by travel is dead weight.
+    if (MainMenuWidget && MainMenuWidget->GetOwningPlayer() != LocalController)
+    {
+        HideMainMenu();
+    }
+
+    if (bWantsFrontEnd)
+    {
+        ShowMainMenu();
+    }
+    else
+    {
+        HideMainMenu();
+    }
 }

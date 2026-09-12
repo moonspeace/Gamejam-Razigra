@@ -1,13 +1,38 @@
 #include "CoopPlayerController.h"
 
 #include "CoopGameState.h"
+#include "CoopHudWidget.h"
+#include "EOSSessionSubsystem.h"
+#include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "GlobalGameData.h"
 #include "Net/UnrealNetwork.h"
+#include "RazigraGameInstance.h"
 
 ACoopPlayerController::ACoopPlayerController()
 {
     bAutoManageActiveCameraTarget = false;
     PrimaryActorTick.bCanEverTick = true;
+}
+
+void ACoopPlayerController::BeginPlay()
+{
+    Super::BeginPlay();
+    if (IsLocalController())
+    {
+        // Each travel builds a fresh controller; let the game instance decide whether the
+        // front end belongs on top of this world, and rebuild it against this controller.
+        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
+        {
+            RazigraInstance->RefreshFrontEnd();
+        }
+    }
+}
+
+void ACoopPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+    HideGameplayHud();
+    Super::EndPlay(EndPlayReason);
 }
 
 void ACoopPlayerController::PlayerTick(float DeltaTime)
@@ -78,6 +103,48 @@ void ACoopPlayerController::BindToSharedHero(ASharedHeroCharacter* Hero)
     SetViewTarget(Hero);
     bShowMouseCursor = false;
     SetInputMode(FInputModeGameOnly());
+
+    // The shared hero only exists once every player is in, so this is the moment the
+    // match actually starts: drop the front end and raise the in-game consensus HUD.
+    if (UGameInstance* Instance = GetGameInstance())
+    {
+        if (UEOSSessionSubsystem* Sessions = Instance->GetSubsystem<UEOSSessionSubsystem>())
+        {
+            Sessions->NotifyGameplayStarted();
+        }
+        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(Instance))
+        {
+            RazigraInstance->HideMainMenu();
+        }
+    }
+    ShowGameplayHud();
+}
+
+void ACoopPlayerController::ShowGameplayHud()
+{
+    if (GameplayHud || !IsLocalController())
+    {
+        return;
+    }
+    TSubclassOf<UCoopHudWidget> HudClass = UGlobalGameData::Get(this)->GameplayHudWidgetClass;
+    if (!HudClass)
+    {
+        HudClass = UCoopHudWidget::StaticClass();
+    }
+    GameplayHud = CreateWidget<UCoopHudWidget>(this, HudClass);
+    if (GameplayHud)
+    {
+        GameplayHud->AddToViewport(10);
+    }
+}
+
+void ACoopPlayerController::HideGameplayHud()
+{
+    if (GameplayHud)
+    {
+        GameplayHud->RemoveFromParent();
+        GameplayHud = nullptr;
+    }
 }
 
 void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCharacter* Hero)

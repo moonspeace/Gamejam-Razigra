@@ -6,6 +6,7 @@
 #include "CoopPlayerController.generated.h"
 
 class ASharedHeroCharacter;
+class UCoopHudWidget;
 
 /** Owns one network player's input, while both players view the same pawn. */
 UCLASS(Blueprintable)
@@ -16,6 +17,8 @@ class GAMEJAMRAZIGRA_API ACoopPlayerController : public APlayerController
 public:
     ACoopPlayerController();
 
+    virtual void BeginPlay() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void PlayerTick(float DeltaTime) override;
     virtual void SetupInputComponent() override;
     virtual void GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const override;
@@ -50,9 +53,14 @@ private:
     UPROPERTY()
     TObjectPtr<ASharedHeroCharacter> SharedHero;
 
+    UPROPERTY()
+    TObjectPtr<UCoopHudWidget> GameplayHud;
+
     FVector2D PendingLookInput = FVector2D::ZeroVector;
     float SharedHeroSearchTime = 0.0f;
 
+    void ShowGameplayHud();
+    void HideGameplayHud();
     void SetAction(EConsensusAction Action, bool bPressed);
     void MoveForwardPressed();
     void MoveForwardReleased();

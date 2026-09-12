@@ -46,15 +46,6 @@ void ASharedHeroCharacter::BeginPlay()
     GetCharacterMovement()->MaxWalkSpeedCrouched = Data->CrouchedSpeed;
     GetCharacterMovement()->JumpZVelocity = Data->JumpVelocity;
 
-    if (USkeletalMesh* MeshAsset = Data->HeroMesh.LoadSynchronous())
-    {
-        GetMesh()->SetSkeletalMeshAsset(MeshAsset);
-    }
-    if (UClass* AnimationClass = Data->HeroAnimationClass.LoadSynchronous())
-    {
-        GetMesh()->SetAnimInstanceClass(AnimationClass);
-    }
-
     AimRotation = FRotator(-10.0f, GetActorRotation().Yaw, 0.0f);
     OnRep_AimRotation();
 }
@@ -105,6 +96,43 @@ void ASharedHeroCharacter::SetParticipantAction(int32 ParticipantIndex, EConsens
         return;
     }
     ParticipantActions[ParticipantIndex][static_cast<int32>(Action)] = bPressed;
+    RefreshActionMasks();
+}
+
+void ASharedHeroCharacter::RefreshActionMasks()
+{
+    int32 Masks[ParticipantCount] = {};
+    for (int32 Participant = 0; Participant < ParticipantCount; ++Participant)
+    {
+        for (int32 ActionIndex = 0; ActionIndex < ActionCount; ++ActionIndex)
+        {
+            if (ParticipantActions[Participant][ActionIndex])
+            {
+                Masks[Participant] |= 1 << ActionIndex;
+            }
+        }
+    }
+    PlayerOneActionMask = Masks[0];
+    PlayerTwoActionMask = Masks[1];
+}
+
+int32 ASharedHeroCharacter::GetParticipantActionMask(int32 ParticipantIndex) const
+{
+    switch (ParticipantIndex)
+    {
+    case 0: return PlayerOneActionMask;
+    case 1: return PlayerTwoActionMask;
+    default: return 0;
+    }
+}
+
+bool ASharedHeroCharacter::IsActionPressedBy(int32 ParticipantIndex, EConsensusAction Action) const
+{
+    if (Action == EConsensusAction::MAX)
+    {
+        return false;
+    }
+    return (GetParticipantActionMask(ParticipantIndex) & (1 << static_cast<int32>(Action))) != 0;
 }
 
 void ASharedHeroCharacter::SubmitParticipantLook(int32 ParticipantIndex, const FVector2D& LookDelta)
@@ -129,6 +157,7 @@ void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
         ParticipantActions[ParticipantIndex][ActionIndex] = false;
     }
     bLookPending[ParticipantIndex] = false;
+    RefreshActionMasks();
 }
 
 void ASharedHeroCharacter::ProcessMovement()
@@ -298,4 +327,7 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, Health);
     DOREPLIFETIME(ASharedHeroCharacter, bIsFiring);
     DOREPLIFETIME(ASharedHeroCharacter, bIsDead);
+    DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerOneActionMask);
+    DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoActionMask);
 }

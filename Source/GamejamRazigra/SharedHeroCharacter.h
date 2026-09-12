@@ -64,6 +64,16 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|State")
     float GetHealthNormalized() const;
 
+    /** Bit mask of the actions a participant is currently holding, replicated for the HUD. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Consensus")
+    int32 GetParticipantActionMask(int32 ParticipantIndex) const;
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Consensus")
+    bool IsActionPressedBy(int32 ParticipantIndex, EConsensusAction Action) const;
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Consensus")
+    int32 GetRequiredConsensusParticipants() const { return RequiredConsensusParticipants; }
+
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Weapon", meta=(DisplayName="On Gun Fired"))
     void BP_OnGunFired(const FVector& TraceStart, const FVector& TraceEnd, bool bHit);
 
@@ -95,9 +105,18 @@ private:
     double LookReceivedAt[ParticipantCount] = {};
     bool bLookPending[ParticipantCount] = {};
     bool bWasJumpConsensus = false;
-    int32 RequiredConsensusParticipants = ParticipantCount;
     double NextFireTime = 0.0;
     double FiringVisualUntil = 0.0;
+
+    UPROPERTY(Replicated)
+    int32 RequiredConsensusParticipants = 2;
+
+    /** Replicated mirrors of ParticipantActions so both clients can draw the consensus HUD. */
+    UPROPERTY(Replicated)
+    int32 PlayerOneActionMask = 0;
+
+    UPROPERTY(Replicated)
+    int32 PlayerTwoActionMask = 0;
 
     UPROPERTY(ReplicatedUsing=OnRep_AimRotation)
     FRotator AimRotation;
@@ -112,6 +131,7 @@ private:
     bool bIsDead = false;
 
     bool HasConsensus(EConsensusAction Action) const;
+    void RefreshActionMasks();
     void ProcessMovement();
     void ProcessLook();
     void ProcessActions();

@@ -7,6 +7,7 @@
 class ASharedHeroCharacter;
 class AZombieCharacter;
 class UAnimInstance;
+class UCoopHudWidget;
 class UCoopMenuWidget;
 
 /**
@@ -25,8 +26,16 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Data", meta=(WorldContext="WorldContextObject"))
     static const UGlobalGameData* Get(const UObject* WorldContextObject);
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Classes")
-    TSubclassOf<ASharedHeroCharacter> HeroClass;
+    /**
+     * The hero Blueprint the shared character is spawned from. Configure the mesh,
+     * animation Blueprint, and every other visual on that Blueprint instead of here.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero")
+    TSoftClassPtr<ASharedHeroCharacter> HeroBlueprint;
+
+    /** Resolves HeroBlueprint, falling back to the C++ class when it is unset. */
+    UFUNCTION(BlueprintPure, Category="Hero")
+    TSubclassOf<ASharedHeroCharacter> GetHeroClass() const;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Classes")
     TSubclassOf<AZombieCharacter> ZombieClass;
@@ -34,14 +43,11 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Classes")
     TSubclassOf<UCoopMenuWidget> MainMenuWidgetClass;
 
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Classes")
+    TSubclassOf<UCoopHudWidget> GameplayHudWidgetClass;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Maps", meta=(AllowedClasses="/Script/Engine.World"))
     TSoftObjectPtr<UWorld> GameplayMap;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
-    TSoftObjectPtr<USkeletalMesh> HeroMesh;
-
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
-    TSoftClassPtr<UAnimInstance> HeroAnimationClass;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftObjectPtr<USkeletalMesh> ZombieMesh;
@@ -97,7 +103,7 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombiePathRefreshInterval = 0.35f;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network", meta=(ClampMin="1", ClampMax="2"))
     int32 RequiredPlayers = 2;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")

@@ -20,11 +20,20 @@ The C++ project, gameplay framework, local two-instance networking fallback, men
 
 ## Editor/content hookup
 
-1. Open `/Game/Data/GlobalGameData`. It is the only global gameplay data asset; tune the gameplay map, menu class, hero, weapon, zombie, mesh, animation, and session values there. You may create a Blueprint class derived from `UGlobalGameData`, but the runtime instance must remain named and located at `/Game/Data/GlobalGameData`.
-2. Open the map selected by `GlobalGameData.GameplayMap`, place and size one or more `NavMeshBoundsVolume` actors over every zombie-walkable area, and press **P** to verify the green navigation coverage. Navigation bounds are deliberately map-owned and are not created at runtime.
-3. Place Blueprint children or instances of `AZombieSpawner` where zombies should appear. Configure **Spawner Active**, **Spawn Rate**, **Spawn Radius**, **Max Alive Zombies**, and **Zombie Class** on each placed spawner. No spawner is created automatically.
-4. Optional presentation pass: derive Blueprint classes from `UGlobalGameData`, `ASharedHeroCharacter`, `AZombieCharacter`, `AZombieSpawner`, `ACoopGameMode`, `ACoopPlayerController`, or `UCoopMenuWidget`. Set the desired class references in `GlobalGameData` and implement the exposed fire/attack/death events for montages, muzzle flashes, sounds, decals, and UI.
-5. If an imported animation Blueprint assumes variables from its original demo character and reports errors, derive a new animation Blueprint and drive it with `IsCharacterMoving`, `IsCharacterCrouching`, `IsCharacterJumping`, `IsCharacterFalling`, `IsCharacterFiring`, `IsAttacking`, and `GetMovementSpeed`.
+1. Open `/Game/Data/GlobalGameData`. It is the only global gameplay data asset; tune the gameplay map, menu class, HUD class, hero Blueprint, weapon, zombie, and session values there. You may create a Blueprint class derived from `UGlobalGameData`, but the runtime instance must remain named and located at `/Game/Data/GlobalGameData`.
+2. The hero's appearance is owned by a Blueprint, not by the data asset. `GlobalGameData.HeroBlueprint` points at `/Game/Blueprints/BP_SharedHero` (created for you by the `CreateRazigraData` commandlet with the sample mannequin already assigned). Open that Blueprint to set the skeletal mesh, animation Blueprint, weapon attachments, muzzle sockets, and the `On Gun Fired` / `On Hero Died` events. Point `HeroBlueprint` at a different Blueprint to swap the survivor wholesale; if it is empty the game falls back to the plain C++ class, which has no mesh.
+3. Open the map selected by `GlobalGameData.GameplayMap`, place and size one or more `NavMeshBoundsVolume` actors over every zombie-walkable area, and press **P** to verify the green navigation coverage. Navigation bounds are deliberately map-owned and are not created at runtime.
+4. Place Blueprint children or instances of `AZombieSpawner` where zombies should appear. Configure **Spawner Active**, **Spawn Rate**, **Spawn Radius**, **Max Alive Zombies**, and **Zombie Class** on each placed spawner. No spawner is created automatically.
+5. Optional presentation pass: derive Blueprint classes from `UGlobalGameData`, `AZombieCharacter`, `AZombieSpawner`, `ACoopGameMode`, `ACoopPlayerController`, `UCoopMenuWidget`, or `UCoopHudWidget`. Set the desired class references in `GlobalGameData` and implement the exposed fire/attack/death events for montages, muzzle flashes, sounds, decals, and UI.
+6. If an imported animation Blueprint assumes variables from its original demo character and reports errors, derive a new animation Blueprint and drive it with `IsCharacterMoving`, `IsCharacterCrouching`, `IsCharacterJumping`, `IsCharacterFalling`, `IsCharacterFiring`, `IsAttacking`, and `GetMovementSpeed`.
+
+## Lobby flow
+
+Hosting no longer loads the gameplay map straight away. **Host Game** creates the session and opens the current front-end map for connections, and the menu switches to a waiting room showing `x of 2 connected`. Only once every required player has joined does the server travel everyone to `GlobalGameData.GameplayMap` and spawn the shared hero, so nobody starts the level alone. A joining client shows the same waiting room until the match begins. All connection and error messages are reported in that menu; nothing is drawn as on-screen debug text.
+
+## In-game HUD
+
+`UCoopHudWidget` is created automatically for each local player when the shared hero appears. It lists every consensus action (W / A / S / D / Space / Ctrl / LMB) and colours each card by who is holding it: red for player one, blue for player two, green once both agree. Colours, blend speed, and the panel tint are exposed under **Zombie Zero|HUD Style**; set `GlobalGameData.GameplayHudWidgetClass` to a Blueprint child to restyle it.
 
 ## Testing the consensus mechanic
 

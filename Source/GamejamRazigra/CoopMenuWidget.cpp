@@ -44,7 +44,7 @@ void UCoopMenuWidget::NativeOnInitialized()
     Title->SetFont(TitleFont);
     Layout->AddChildToVerticalBox(Title)->SetPadding(FMargin(0.0f, 0.0f, 0.0f, 28.0f));
 
-    UTextBlock* Subtitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Subtitle"));
+    Subtitle = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Subtitle"));
     Subtitle->SetText(FText::FromString(TEXT("TWO PLAYERS. ONE SURVIVOR.\nEvery action requires both players.")));
     Subtitle->SetJustification(ETextJustify::Center);
     Subtitle->SetColorAndOpacity(FSlateColor(FLinearColor::White));
@@ -93,10 +93,43 @@ void UCoopMenuWidget::NativeConstruct()
     if (UEOSSessionSubsystem* Sessions = GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>())
     {
         Sessions->OnStatusChanged.AddUniqueDynamic(this, &ThisClass::HandleStatusChanged);
+        ApplyLobbyMode();
         const FString InitialStatus = Sessions->GetLastStatus();
         HandleStatusChanged(InitialStatus.IsEmpty()
             ? FString::Printf(TEXT("Online service: %s"), *Sessions->GetOnlineSubsystemName())
             : InitialStatus);
+    }
+}
+
+void UCoopMenuWidget::ApplyLobbyMode()
+{
+    const UEOSSessionSubsystem* Sessions = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    const bool bLobby = Sessions && Sessions->IsWaitingForPlayers();
+    if (!bLobby)
+    {
+        return;
+    }
+
+    // The lobby is a waiting room: nothing left to click until everyone is in.
+    const ESlateVisibility Hidden = ESlateVisibility::Collapsed;
+    if (HostButton)
+    {
+        HostButton->SetVisibility(Hidden);
+    }
+    if (JoinButton)
+    {
+        JoinButton->SetVisibility(Hidden);
+    }
+    if (SinglePlayerButton)
+    {
+        SinglePlayerButton->SetVisibility(Hidden);
+    }
+    if (Subtitle)
+    {
+        Subtitle->SetText(FText::FromString(FString::Printf(
+            TEXT("WAITING FOR PLAYERS\n%d of %d connected"),
+            Sessions->GetConnectedPlayers(), Sessions->GetExpectedPlayers())));
     }
 }
 
@@ -148,6 +181,8 @@ void UCoopMenuWidget::HandleStatusChanged(const FString& NewStatus)
     {
         StatusText->SetText(FText::FromString(FString::Join(StatusHistory, TEXT("\n"))));
     }
+    ApplyLobbyMode();
+
     const bool bBusy = NewStatus.Contains(TEXT("..."));
     if (HostButton)
     {
