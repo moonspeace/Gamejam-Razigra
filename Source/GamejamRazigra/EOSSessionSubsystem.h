@@ -53,10 +53,6 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Network")
     int32 GetExpectedPlayers() const { return ExpectedPlayers; }
 
-    /** True while the loaded map is the one GlobalGameData nominates for gameplay. */
-    UFUNCTION(BlueprintPure, Category="Razigra|Network")
-    bool IsOnGameplayMap() const;
-
     UFUNCTION(BlueprintPure, Category="Zombie Zero|Network")
     FString GetLastStatus() const { return LastStatus; }
 
@@ -102,7 +98,6 @@ private:
     void CreateSession();
     void BroadcastStatus(const FString& Status);
     void BeginGameplayTravel(bool bSinglePlayer, bool bHideMenu = true);
-    bool StartListening();
     void TravelToGameplayMap();
     FString GetGameplayMapName() const;
     void HandleNetworkFailure(UWorld* World, UNetDriver* NetDriver, ENetworkFailure::Type FailureType,

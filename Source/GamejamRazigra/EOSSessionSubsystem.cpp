@@ -8,10 +8,8 @@
 #include "GameFramework/PlayerController.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
-#include "HAL/IConsoleManager.h"
 #include "Interfaces/OnlineIdentityInterface.h"
 #include "Misc/ConfigCacheIni.h"
-#include "Misc/PackageName.h"
 #include "Misc/Paths.h"
 #include "Online/OnlineSessionNames.h"
 #include "OnlineSubsystem.h"
@@ -30,21 +28,6 @@ void UEOSSessionSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
     Super::Initialize(Collection);
     LoadExternalEOSConfig();
-
-#if WITH_EDITOR
-    // PIE disables seamless travel by default. Without it, the lobby's travel to the gameplay
-    // map is a hard travel that drops every connected client, so force it on in the editor.
-    if (IConsoleVariable* AllowPIESeamlessTravel =
-        IConsoleManager::Get().FindConsoleVariable(TEXT("net.AllowPIESeamlessTravel")))
-    {
-        if (AllowPIESeamlessTravel->GetInt() == 0)
-        {
-            AllowPIESeamlessTravel->Set(TEXT("1"), ECVF_SetByCode);
-            UE_LOG(LogRazigra, Log,
-                TEXT("Enabled net.AllowPIESeamlessTravel so PIE clients survive the travel out of the lobby."));
-        }
-    }
-#endif
 
     if (GEngine)
     {
@@ -185,46 +168,6 @@ void UEOSSessionSubsystem::StartSinglePlayer()
 FString UEOSSessionSubsystem::GetGameplayMapName() const
 {
     return UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
-}
-
-bool UEOSSessionSubsystem::IsOnGameplayMap() const
-{
-    const UWorld* World = GetWorld();
-    if (!World)
-    {
-        return false;
-    }
-    const FString Current = UWorld::RemovePIEPrefix(World->GetMapName());
-    const FString Gameplay = FPackageName::GetShortName(GetGameplayMapName());
-    return !Gameplay.IsEmpty() && Current.Equals(Gameplay, ESearchCase::IgnoreCase);
-}
-
-/**
- * Opens the current map for connections without travelling anywhere. The host stays in the
- * front end, advertising the session, until every player has joined.
- */
-bool UEOSSessionSubsystem::StartListening()
-{
-    UWorld* World = GetWorld();
-    if (!World)
-    {
-        return false;
-    }
-    if (World->GetNetMode() == NM_ListenServer || World->GetNetMode() == NM_DedicatedServer)
-    {
-        return true;
-    }
-
-    FURL ListenURL(nullptr, TEXT(""), TRAVEL_Absolute);
-    ListenURL.AddOption(TEXT("listen"));
-    if (!World->Listen(ListenURL))
-    {
-        return false;
-    }
-    World->URL.AddOption(TEXT("listen"));
-    UE_LOG(LogRazigra, Log, TEXT("Lobby is listening on map %s; waiting for players before travelling."),
-        *World->GetMapName());
-    return true;
 }
 
 void UEOSSessionSubsystem::TravelToGameplayMap()
@@ -422,36 +365,20 @@ void UEOSSessionSubsystem::HandleCreateSessionComplete(FName SessionName, bool b
         return;
     }
 
-    const UGlobalGameData* Data = UGlobalGameData::Get(this);
     bWaitingForPlayer = true;
     bSinglePlayerMode = false;
-    ExpectedPlayers = Data->RequiredPlayers;
+    ExpectedPlayers = UGlobalGameData::Get(this)->RequiredPlayers;
     ConnectedPlayers = FMath::Max(1, ConnectedPlayers);
 
-    if (!Data->bWaitForAllPlayersBeforeTravel)
-    {
-        // Fallback flow: open the gameplay map straight away and let the other player join
-        // into it. The menu stays up over the level until everybody has arrived.
-        UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; opening the gameplay map immediately."),
-            *SessionName.ToString());
-        BroadcastStatus(FString::Printf(TEXT("Session created. Waiting for players... (%d/%d connected)"),
-            ConnectedPlayers, ExpectedPlayers));
-        BeginGameplayTravel(false, false);
-        TravelToGameplayMap();
-        return;
-    }
-
-    if (!StartListening())
-    {
-        bWaitingForPlayer = false;
-        BroadcastStatus(TEXT("Could not open this machine for connections. Check the net driver configuration."));
-        return;
-    }
-
-    UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; holding the lobby until %d players are connected."),
-        *SessionName.ToString(), ExpectedPlayers);
+    // Open the listen map now, while nobody is connected yet. Travelling later, with a client
+    // already attached, is what tears the connection down, so the wait for the second player
+    // happens on this map instead: the menu stays up and the hero is not spawned until then.
     BroadcastStatus(FString::Printf(TEXT("Session created. Waiting for players... (%d/%d connected)"),
         ConnectedPlayers, ExpectedPlayers));
+    UE_LOG(LogRazigra, Log, TEXT("Host session '%s' created; opening the listen map for player 2."),
+        *SessionName.ToString());
+    BeginGameplayTravel(false, false);
+    TravelToGameplayMap();
 }
 
 void UEOSSessionSubsystem::HandleFindSessionsComplete(bool bWasSuccessful)
@@ -520,12 +447,8 @@ void UEOSSessionSubsystem::HandleJoinSessionComplete(FName SessionName, EOnJoinS
     }
     if (APlayerController* Controller = GetGameInstance()->GetFirstLocalPlayerController())
     {
-        BroadcastStatus(TEXT("Connected. Waiting for every player to be ready..."));
-        bWaitingForPlayer = true;
+        BroadcastStatus(TEXT("Connected. Loading the game..."));
         bSinglePlayerMode = false;
-        ExpectedPlayers = UGlobalGameData::Get(this)->RequiredPlayers;
-        // Drop the front end before travelling; it is rebuilt against the new player
-        // controller on the other side, and removed for good once the match starts.
         BeginGameplayTravel(false);
         Controller->ClientTravel(ConnectString, TRAVEL_Absolute);
     }
@@ -547,12 +470,7 @@ void UEOSSessionSubsystem::NotifyPlayerCountChanged(int32 InConnectedPlayers, in
         bWaitingForPlayer = false;
         BroadcastStatus(FString::Printf(TEXT("All players connected (%d/%d). Starting Zombie Zero..."),
             ConnectedPlayers, ExpectedPlayers));
-        const bool bNeedsTravel = UGlobalGameData::Get(this)->bWaitForAllPlayersBeforeTravel;
         BeginGameplayTravel(false);
-        if (bNeedsTravel)
-        {
-            TravelToGameplayMap();
-        }
     }
     else
     {

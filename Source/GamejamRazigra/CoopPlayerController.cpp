@@ -15,20 +15,6 @@ ACoopPlayerController::ACoopPlayerController()
     PrimaryActorTick.bCanEverTick = true;
 }
 
-void ACoopPlayerController::BeginPlay()
-{
-    Super::BeginPlay();
-    if (IsLocalController())
-    {
-        // Each travel builds a fresh controller; let the game instance decide whether the
-        // front end belongs on top of this world, and rebuild it against this controller.
-        if (URazigraGameInstance* RazigraInstance = Cast<URazigraGameInstance>(GetGameInstance()))
-        {
-            RazigraInstance->RefreshFrontEnd();
-        }
-    }
-}
-
 void ACoopPlayerController::EndPlay(const EEndPlayReason::Type EndPlayReason)
 {
     HideGameplayHud();

@@ -27,9 +27,13 @@ The C++ project, gameplay framework, local two-instance networking fallback, men
 5. Optional presentation pass: derive Blueprint classes from `UGlobalGameData`, `AZombieCharacter`, `AZombieSpawner`, `ACoopGameMode`, `ACoopPlayerController`, `UCoopMenuWidget`, or `UCoopHudWidget`. Set the desired class references in `GlobalGameData` and implement the exposed fire/attack/death events for montages, muzzle flashes, sounds, decals, and UI.
 6. If an imported animation Blueprint assumes variables from its original demo character and reports errors, derive a new animation Blueprint and drive it with `IsCharacterMoving`, `IsCharacterCrouching`, `IsCharacterJumping`, `IsCharacterFalling`, `IsCharacterFiring`, `IsAttacking`, and `GetMovementSpeed`.
 
-## Lobby flow
+## Waiting for both players
 
-Hosting no longer loads the gameplay map straight away. **Host Game** creates the session and opens the current front-end map for connections, and the menu switches to a waiting room showing `x of 2 connected`. Only once every required player has joined does the server travel everyone to `GlobalGameData.GameplayMap` and spawn the shared hero, so nobody starts the level alone. A joining client shows the same waiting room until the match begins. All connection and error messages are reported in that menu; nothing is drawn as on-screen debug text.
+**Host Game** creates the session and immediately opens `GlobalGameData.GameplayMap` as a listen server, exactly as before — the map must be open before anyone can connect, and travelling again once a client is attached tears the connection down, so the host never travels twice.
+
+The wait happens on that map instead: the menu stays up as a waiting room showing `x of 2 connected`, and the shared hero is not spawned until every required player has joined, so nobody plays alone. The joining client travels straight into the same map and picks up the hero as soon as it appears. Set `GlobalGameData.bWaitForAllPlayersBeforeStart` to false to spawn the hero the moment the map loads.
+
+All connection and error messages are reported in the menu; nothing is drawn as on-screen debug text.
 
 ## In-game HUD
 

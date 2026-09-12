@@ -110,10 +110,10 @@ public:
     FString SessionName = TEXT("Zombie Zero Two Player Co-op");
 
     /**
-     * When true the host waits in the front end until every player has joined and only then
-     * travels everybody to GameplayMap. Turn it off to fall back to the older behaviour where
-     * the host opens the gameplay map immediately and the other player joins into it.
+     * When true the shared hero is not spawned until every required player has connected, so
+     * nobody starts playing alone. The host still opens the listen map as soon as the session
+     * is created; only the start of play waits. Turn it off to begin the moment the map loads.
      */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Network")
-    bool bWaitForAllPlayersBeforeTravel = true;
+    bool bWaitForAllPlayersBeforeStart = true;
 };

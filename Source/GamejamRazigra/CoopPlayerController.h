@@ -17,7 +17,6 @@ class GAMEJAMRAZIGRA_API ACoopPlayerController : public APlayerController
 public:
     ACoopPlayerController();
 
-    virtual void BeginPlay() override;
     virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
     virtual void PlayerTick(float DeltaTime) override;
     virtual void SetupInputComponent() override;

@@ -39,10 +39,9 @@ int32 ACoopGameMode::GetRequiredPlayers() const
 }
 
 /**
- * The player-count gate lives in the session subsystem, which holds the lobby until everyone
- * is connected and only then travels here. By the time this returns true the wait is over, so
- * it must not re-check the count: a player who drops during travel would otherwise leave the
- * level permanently empty with no hero and no way to recover.
+ * The listen map is opened as soon as the session exists, so being here does not mean the game
+ * has started. The hero is held back until every player has actually connected; that wait is
+ * purely server-side bookkeeping and never touches travel or the net connection.
  */
 bool ACoopGameMode::CanStartGameplay() const
 {
@@ -50,10 +49,11 @@ bool ACoopGameMode::CanStartGameplay() const
     {
         return false;
     }
-    if (!GetWorld()->NextURL.IsEmpty())
+    // AGameModeBase::GetNumPlayers() is not const, and AssignedSlots is the same population
+    // counted the same way on every net mode, so use it for the gate everywhere.
+    const bool bEveryoneConnected = AssignedSlots.Num() >= GetRequiredPlayers();
+    if (UGlobalGameData::Get(this)->bWaitForAllPlayersBeforeStart && !bEveryoneConnected)
     {
-        // A server travel is already queued this frame (the lobby just filled up). Spawning
-        // here would put the hero on the map we are about to leave.
         return false;
     }
     if (GetWorld()->GetNetMode() == NM_DedicatedServer)
@@ -62,12 +62,7 @@ bool ACoopGameMode::CanStartGameplay() const
     }
     const UGameInstance* Instance = GetGameInstance();
     const UEOSSessionSubsystem* Sessions = Instance ? Instance->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
-    if (!Sessions)
-    {
-        return false;
-    }
-    // Still in the front end, or still holding the lobby for the other player.
-    return !Sessions->ShouldShowMainMenu() && !Sessions->IsWaitingForPlayers();
+    return Sessions && !Sessions->ShouldShowMainMenu();
 }
 
 void ACoopGameMode::EnsureSharedHero()

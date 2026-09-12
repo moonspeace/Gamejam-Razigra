@@ -21,13 +21,6 @@ public:
     UFUNCTION(BlueprintCallable, Category="Razigra|Menu")
     void HideMainMenu();
 
-    /**
-     * Rebuilds or tears down the front end for the world that just loaded. Travel destroys
-     * the owning player controller, so the widget has to be recreated against the new one.
-     */
-    UFUNCTION(BlueprintCallable, Category="Razigra|Menu")
-    void RefreshFrontEnd();
-
     UFUNCTION(BlueprintPure, Category="Razigra|Menu")
     bool IsMainMenuVisible() const;
 
@@ -37,5 +30,4 @@ private:
 
     FTimerHandle ShowMenuRetryTimer;
 
-    bool ShouldFrontEndBeVisible() const;
 };
