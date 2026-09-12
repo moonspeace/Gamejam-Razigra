@@ -112,7 +112,6 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
 
     USizeBox* HealthBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthBox"));
-    HealthBox->SetWidthOverride(320.0f);
     HealthBox->SetHeightOverride(28.0f);
     UOverlay* HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("HeroHealthOverlay"));
     HealthBox->SetContent(HealthOverlay);
@@ -128,6 +127,7 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
 
     HealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeroHealthText"));
     HealthText->SetFont(Data->HudKeyLabelFont);
+    HealthText->SetText(FText::FromString(TEXT("HEALTH")));
     HealthText->SetJustification(ETextJustify::Center);
     HealthText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
     if (UOverlaySlot* TextSlot = HealthOverlay->AddChildToOverlay(HealthText))
@@ -135,11 +135,23 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
         TextSlot->SetHorizontalAlignment(HAlign_Fill);
         TextSlot->SetVerticalAlignment(VAlign_Center);
     }
-    if (UOverlaySlot* HealthSlot = Root->AddChildToOverlay(HealthBox))
+    UHorizontalBox* HealthWidthLayout = WidgetTree->ConstructWidget<UHorizontalBox>(
+        UHorizontalBox::StaticClass(), TEXT("HeroHealthWidthLayout"));
+    USizeBox* LeftSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthLeftSpacer"));
+    USizeBox* RightSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthRightSpacer"));
+    FSlateChildSize QuarterWidth;
+    QuarterWidth.SizeRule = ESlateSizeRule::Fill;
+    QuarterWidth.Value = 1.0f;
+    FSlateChildSize HalfWidth;
+    HalfWidth.SizeRule = ESlateSizeRule::Fill;
+    HalfWidth.Value = 2.0f;
+    HealthWidthLayout->AddChildToHorizontalBox(LeftSpacer)->SetSize(QuarterWidth);
+    HealthWidthLayout->AddChildToHorizontalBox(HealthBox)->SetSize(HalfWidth);
+    HealthWidthLayout->AddChildToHorizontalBox(RightSpacer)->SetSize(QuarterWidth);
+    if (UOverlaySlot* HealthSlot = Root->AddChildToOverlay(HealthWidthLayout))
     {
-        HealthSlot->SetHorizontalAlignment(HAlign_Center);
-        HealthSlot->SetVerticalAlignment(VAlign_Top);
-        HealthSlot->SetPadding(FMargin(0.0f, 34.0f, 0.0f, 0.0f));
+        HealthSlot->SetHorizontalAlignment(HAlign_Fill);
+        HealthSlot->SetVerticalAlignment(VAlign_Center);
     }
 
     CrosshairBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CrosshairCircleBox"));
@@ -411,9 +423,7 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     }
     if (HealthText)
     {
-        const int32 CurrentHealth = Hero ? FMath::CeilToInt(Hero->GetHealth()) : 0;
-        const int32 MaxHealth = FMath::CeilToInt(UGlobalGameData::Get(this)->HeroMaxHealth);
-        HealthText->SetText(FText::FromString(FString::Printf(TEXT("%d / %d"), CurrentHealth, MaxHealth)));
+        HealthText->SetText(FText::FromString(TEXT("HEALTH")));
     }
 
     const UGlobalGameData* Data = UGlobalGameData::Get(this);

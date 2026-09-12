@@ -12,6 +12,7 @@ namespace RazigraData
 {
     static const TCHAR* AssetPath = TEXT("/Game/Data/GlobalGameData.GlobalGameData");
     static const TCHAR* DefaultHeroBlueprintPath = TEXT("/Game/Blueprints/BP_SharedHero.BP_SharedHero_C");
+    static const TCHAR* ZombieDeathMaterialPath = TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath");
 }
 
 UGlobalGameData::UGlobalGameData()
@@ -30,6 +31,7 @@ UGlobalGameData::UGlobalGameData()
     ZombieAnimationClass = TSoftClassPtr<UAnimInstance>(FSoftObjectPath(TEXT("/Game/ZombieMale_AAB/Animations/ABP_Zombie.ABP_Zombie_C")));
     DamageNumberFont = TSoftObjectPtr<UFont>(FSoftObjectPath(TEXT("/Engine/EngineFonts/Roboto.Roboto")));
     HeroDamageCameraShakeClass = UHeroDamageCameraShake::StaticClass();
+    ZombieDeathMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::ZombieDeathMaterialPath));
 }
 
 TSubclassOf<ASharedHeroCharacter> UGlobalGameData::GetHeroClass() const

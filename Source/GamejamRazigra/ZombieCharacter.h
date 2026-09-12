@@ -5,6 +5,7 @@
 #include "ZombieCharacter.generated.h"
 
 class ASharedHeroCharacter;
+class UMaterialInstanceDynamic;
 
 /** Simple server-controlled zombie: path to the shared hero, then attack. */
 UCLASS(Blueprintable)
@@ -72,12 +73,18 @@ private:
     UPROPERTY()
     TObjectPtr<ASharedHeroCharacter> TargetHero;
 
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UMaterialInstanceDynamic>> DeathMaterials;
+
     double NextPathRefreshTime = 0.0;
     double NextAttackTime = 0.0;
     double AttackHitTime = 0.0;
+    float DeathEffectElapsed = 0.0f;
 
     void AcquireTarget();
     void UpdateServerBehavior();
     void StartAttack();
     void ResolveAttack();
+    void StartDeathEffect();
+    void UpdateDeathEffect(float DeltaSeconds);
 };

@@ -159,6 +159,7 @@ private:
 
     bool HasConsensus(EConsensusAction Action) const;
     void EnsureVisibleMesh();
+    void ConfigureCamera();
     void RefreshActionMasks();
     void ProcessMovement();
     void ProcessLook();

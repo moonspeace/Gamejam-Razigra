@@ -21,6 +21,17 @@ ACoopGameMode::ACoopGameMode()
 void ACoopGameMode::StartPlay()
 {
     Super::StartPlay();
+
+    // Local OpenLevel travel can enter StartPlay before PostLogin is called for the carried
+    // local controller. Register every controller already in the world so solo mode cannot
+    // remain on the intentional pre-game black screen forever.
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        if (ACoopPlayerController* Controller = Cast<ACoopPlayerController>(It->Get()))
+        {
+            RegisterPlayer(Controller);
+        }
+    }
     if (CanStartGameplay())
     {
         EnsureSharedHero();

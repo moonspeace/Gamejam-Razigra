@@ -21,6 +21,7 @@ ASharedHeroCharacter::ASharedHeroCharacter()
     bReplicates = true;
     SetReplicateMovement(true);
     SetNetUpdateFrequency(60.0f);
+    SetCanBeDamaged(true);
 
     GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
     GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -96.0f), FRotator(0.0f, -90.0f, 0.0f));
@@ -54,9 +55,34 @@ void ASharedHeroCharacter::BeginPlay()
     GetCharacterMovement()->JumpZVelocity = Data->JumpVelocity;
 
     EnsureVisibleMesh();
+    ConfigureCamera();
 
     AimRotation = FRotator(-10.0f, GetActorRotation().Yaw, 0.0f);
     OnRep_AimRotation();
+}
+
+void ASharedHeroCharacter::ConfigureCamera()
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    const FName AttachBone = Data->CameraAttachBoneName;
+    if (!AttachBone.IsNone() && GetMesh() && GetMesh()->DoesSocketExist(AttachBone))
+    {
+        CameraBoom->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachBone);
+        CameraBoom->SetRelativeLocation(Data->CameraOffset);
+        CameraBoom->SocketOffset = FVector::ZeroVector;
+        UE_LOG(LogRazigra, Log, TEXT("Camera boom attached to hero bone/socket '%s' with offset %s."),
+            *AttachBone.ToString(), *Data->CameraOffset.ToCompactString());
+        return;
+    }
+
+    CameraBoom->AttachToComponent(GetCapsuleComponent(), FAttachmentTransformRules::KeepRelativeTransform);
+    CameraBoom->SetRelativeLocation(FVector::ZeroVector);
+    CameraBoom->SocketOffset = Data->CameraOffset;
+    if (!AttachBone.IsNone())
+    {
+        UE_LOG(LogRazigra, Warning, TEXT("Camera bone/socket '%s' was not found; using root-mounted camera."),
+            *AttachBone.ToString());
+    }
 }
 
 /**
@@ -330,6 +356,9 @@ void ASharedHeroCharacter::FireGun()
     const FVector TraceEnd = TraceStart + ShotDirection * Data->FireRange;
     FHitResult Hit;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(RazigraGun), true, this);
+    Params.AddIgnoredActor(this);
+    Params.AddIgnoredComponent(GetCapsuleComponent());
+    Params.AddIgnoredComponent(GetMesh());
     const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
     const FVector FinalEnd = bHit ? Hit.ImpactPoint : TraceEnd;
     AActor* HitActor = bHit ? Hit.GetActor() : nullptr;
@@ -348,14 +377,16 @@ void ASharedHeroCharacter::FireGun()
 
 FVector ASharedHeroCharacter::GetMuzzleLocation() const
 {
-    const FName MuzzleSocket = UGlobalGameData::Get(this)->MuzzleSocketName;
+    const FName OriginBone = UGlobalGameData::Get(this)->VisualTraceOriginBoneName;
     if (const USkeletalMeshComponent* MeshComponent = GetMesh())
     {
-        if (!MuzzleSocket.IsNone() && MeshComponent->DoesSocketExist(MuzzleSocket))
+        if (!OriginBone.IsNone() && MeshComponent->DoesSocketExist(OriginBone))
         {
-            return MeshComponent->GetSocketLocation(MuzzleSocket);
+            return MeshComponent->GetSocketLocation(OriginBone);
         }
     }
+    UE_LOG(LogRazigra, Warning, TEXT("Visual trace origin bone/socket '%s' was not found; using camera origin."),
+        *OriginBone.ToString());
     return FollowCamera ? FollowCamera->GetComponentLocation() : GetActorLocation();
 }
 
@@ -387,6 +418,9 @@ float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
     }
     const float Applied = FMath::Min(Health, FMath::Max(0.0f, DamageAmount));
     Health -= Applied;
+    UE_LOG(LogRazigra, Log, TEXT("Hero received %.1f damage from %s (health %.1f/%.1f)."), Applied,
+        DamageCauser ? *DamageCauser->GetName() : TEXT("unknown"), Health,
+        UGlobalGameData::Get(this)->HeroMaxHealth);
     if (Applied > 0.0f)
     {
         MulticastHeroDamaged(Applied);
