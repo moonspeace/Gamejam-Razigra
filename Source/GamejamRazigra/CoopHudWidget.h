@@ -8,6 +8,7 @@
 class UBorder;
 class UHorizontalBox;
 class UProgressBar;
+class USizeBox;
 class UTextBlock;
 class UVerticalBox;
 
@@ -23,6 +24,12 @@ class GAMEJAMRAZIGRA_API UCoopHudWidget : public UUserWidget
 
 public:
     UCoopHudWidget(const FObjectInitializer& ObjectInitializer);
+
+    /** Called locally when the shared hero takes damage. */
+    void ShowDamageFeedback(float DamageAmount);
+
+    /** Gives every shot native feedback even when the hero Blueprint has no weapon effects. */
+    void ShowFireFeedback(bool bHit);
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style")
     FLinearColor PlayerOneColor;
@@ -57,9 +64,31 @@ private:
     UPROPERTY()
     TArray<TObjectPtr<UProgressBar>> AxisMeters;
 
+    UPROPERTY()
+    TObjectPtr<UProgressBar> HealthBar;
+
+    UPROPERTY()
+    TObjectPtr<UTextBlock> HealthText;
+
+    UPROPERTY()
+    TArray<TObjectPtr<UBorder>> DamageVignetteEdges;
+
+    UPROPERTY()
+    TObjectPtr<UBorder> CrosshairCircle;
+
+    UPROPERTY()
+    TObjectPtr<USizeBox> CrosshairBox;
+
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
+    TArray<float> DamageVignetteWeights;
+    float DamageFeedbackRemaining = 0.0f;
+    float DamageFeedbackStrength = 0.0f;
+    float FireFeedbackRemaining = 0.0f;
+    bool bLastShotHit = false;
 
+    void BuildCombatIndicators(class UOverlay* Root);
+    void BuildDamageVignette(class UOverlay* Root);
     UWidget* BuildActionCard(EConsensusAction Action, const FString& KeyText, float Width);
     UWidget* BuildKeySpacer(const FString& Tag);
     UWidget* BuildAxisMeters();

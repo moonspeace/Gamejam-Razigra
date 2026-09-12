@@ -6,6 +6,7 @@
 #include "Components/HorizontalBoxSlot.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
+#include "Components/PanelWidget.h"
 #include "Components/ProgressBar.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -50,6 +51,9 @@ void UCoopHudWidget::NativeOnInitialized()
 
     UOverlay* Root = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("HudRoot"));
     WidgetTree->RootWidget = Root;
+
+    BuildDamageVignette(Root);
+    BuildCombatIndicators(Root);
 
     // No panel behind the keys: the key caps are the only chrome.
     UHorizontalBox* Row = WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), TEXT("HudRow"));
@@ -103,6 +107,134 @@ void UCoopHudWidget::NativeOnInitialized()
     }
 }
 
+void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+
+    USizeBox* HealthBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroHealthBox"));
+    HealthBox->SetWidthOverride(320.0f);
+    HealthBox->SetHeightOverride(28.0f);
+    UOverlay* HealthOverlay = WidgetTree->ConstructWidget<UOverlay>(UOverlay::StaticClass(), TEXT("HeroHealthOverlay"));
+    HealthBox->SetContent(HealthOverlay);
+
+    HealthBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HeroHealthBar"));
+    FProgressBarStyle HealthStyle = HealthBar->GetWidgetStyle();
+    HealthStyle.BackgroundImage.TintColor = FSlateColor(Data->HeroHealthBackgroundColor);
+    HealthStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
+    HealthBar->SetWidgetStyle(HealthStyle);
+    HealthBar->SetFillColorAndOpacity(Data->HeroHealthFillColor);
+    HealthBar->SetPercent(1.0f);
+    HealthOverlay->AddChildToOverlay(HealthBar);
+
+    HealthText = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("HeroHealthText"));
+    HealthText->SetFont(Data->HudKeyLabelFont);
+    HealthText->SetJustification(ETextJustify::Center);
+    HealthText->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    if (UOverlaySlot* TextSlot = HealthOverlay->AddChildToOverlay(HealthText))
+    {
+        TextSlot->SetHorizontalAlignment(HAlign_Fill);
+        TextSlot->SetVerticalAlignment(VAlign_Center);
+    }
+    if (UOverlaySlot* HealthSlot = Root->AddChildToOverlay(HealthBox))
+    {
+        HealthSlot->SetHorizontalAlignment(HAlign_Center);
+        HealthSlot->SetVerticalAlignment(VAlign_Top);
+        HealthSlot->SetPadding(FMargin(0.0f, 34.0f, 0.0f, 0.0f));
+    }
+
+    CrosshairBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CrosshairCircleBox"));
+    CrosshairBox->SetWidthOverride(Data->CrosshairDotSize);
+    CrosshairBox->SetHeightOverride(Data->CrosshairDotSize);
+    CrosshairCircle = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CrosshairCircle"));
+    FSlateBrush CircleBrush;
+    CircleBrush.DrawAs = ESlateBrushDrawType::RoundedBox;
+    CircleBrush.OutlineSettings.CornerRadii = FVector4(Data->CrosshairDotSize * 0.5f);
+    CrosshairCircle->SetBrush(CircleBrush);
+    CrosshairCircle->SetBrushColor(Data->CrosshairDotColor);
+    CrosshairBox->SetContent(CrosshairCircle);
+    if (UOverlaySlot* DotSlot = Root->AddChildToOverlay(CrosshairBox))
+    {
+        DotSlot->SetHorizontalAlignment(HAlign_Center);
+        DotSlot->SetVerticalAlignment(VAlign_Center);
+    }
+}
+
+void UCoopHudWidget::BuildDamageVignette(UOverlay* Root)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    const auto AddEdge = [this, Root, Data](const TCHAR* Name, bool bHorizontal,
+        EHorizontalAlignment HorizontalAlignment, EVerticalAlignment VerticalAlignment, bool bReverse)
+    {
+        constexpr int32 BandCount = 7;
+        constexpr float EdgeDepth = 112.0f;
+        USizeBox* EdgeBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), Name);
+        if (bHorizontal)
+        {
+            EdgeBox->SetHeightOverride(EdgeDepth);
+        }
+        else
+        {
+            EdgeBox->SetWidthOverride(EdgeDepth);
+        }
+
+        UPanelWidget* Bands = bHorizontal
+            ? static_cast<UPanelWidget*>(WidgetTree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), *FString::Printf(TEXT("%sBands"), Name)))
+            : static_cast<UPanelWidget*>(WidgetTree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(), *FString::Printf(TEXT("%sBands"), Name)));
+        EdgeBox->SetContent(Bands);
+        EdgeBox->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+        for (int32 BandIndex = 0; BandIndex < BandCount; ++BandIndex)
+        {
+            const int32 GradientIndex = bReverse ? BandCount - 1 - BandIndex : BandIndex;
+            const float Weight = FMath::Square(1.0f - static_cast<float>(GradientIndex) / BandCount);
+            USizeBox* BandBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),
+                *FString::Printf(TEXT("%sBandBox%d"), Name, BandIndex));
+            if (bHorizontal)
+            {
+                BandBox->SetHeightOverride(EdgeDepth / BandCount);
+            }
+            else
+            {
+                BandBox->SetWidthOverride(EdgeDepth / BandCount);
+            }
+            UBorder* Band = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(),
+                *FString::Printf(TEXT("%sBand%d"), Name, BandIndex));
+            FLinearColor HiddenColor = Data->HeroDamageVignetteColor;
+            HiddenColor.A = 0.0f;
+            Band->SetBrushColor(HiddenColor);
+            BandBox->SetContent(Band);
+            Bands->AddChild(BandBox);
+            DamageVignetteEdges.Add(Band);
+            DamageVignetteWeights.Add(Weight);
+        }
+
+        if (UOverlaySlot* EdgeSlot = Root->AddChildToOverlay(EdgeBox))
+        {
+            EdgeSlot->SetHorizontalAlignment(HorizontalAlignment);
+            EdgeSlot->SetVerticalAlignment(VerticalAlignment);
+        }
+    };
+
+    AddEdge(TEXT("DamageTop"), true, HAlign_Fill, VAlign_Top, false);
+    AddEdge(TEXT("DamageBottom"), true, HAlign_Fill, VAlign_Bottom, true);
+    AddEdge(TEXT("DamageLeft"), false, HAlign_Left, VAlign_Fill, false);
+    AddEdge(TEXT("DamageRight"), false, HAlign_Right, VAlign_Fill, true);
+}
+
+void UCoopHudWidget::ShowDamageFeedback(float DamageAmount)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    DamageFeedbackRemaining = FMath::Max(DamageFeedbackRemaining, Data->HeroDamageVignetteDuration);
+    const float RelativeDamage = Data->HeroMaxHealth > 0.0f ? DamageAmount / Data->HeroMaxHealth : 1.0f;
+    DamageFeedbackStrength = FMath::Clamp(0.45f + RelativeDamage * 3.0f, 0.45f, 1.0f);
+}
+
+void UCoopHudWidget::ShowFireFeedback(bool bHit)
+{
+    FireFeedbackRemaining = 0.12f;
+    bLastShotHit = bHit;
+}
+
 /** An invisible key-sized block, so the two rows line up like a real keyboard. */
 UWidget* UCoopHudWidget::BuildKeySpacer(const FString& Tag)
 {
@@ -151,9 +283,11 @@ UWidget* UCoopHudWidget::BuildActionCard(EConsensusAction Action, const FString&
 UProgressBar* UCoopHudWidget::BuildMeter(const FString& Tag, bool bVertical, const FLinearColor& Color)
 {
     UProgressBar* Meter = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), *Tag);
-    Meter->WidgetStyle.BackgroundImage.TintColor = FSlateColor(RazigraHud::MeterBackgroundColor);
-    Meter->WidgetStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
-    Meter->BarFillType = bVertical ? EProgressBarFillType::BottomToTop : EProgressBarFillType::LeftToRight;
+    FProgressBarStyle MeterStyle = Meter->GetWidgetStyle();
+    MeterStyle.BackgroundImage.TintColor = FSlateColor(RazigraHud::MeterBackgroundColor);
+    MeterStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
+    Meter->SetWidgetStyle(MeterStyle);
+    Meter->SetBarFillType(bVertical ? EProgressBarFillType::BottomToTop : EProgressBarFillType::LeftToRight);
     Meter->SetFillColorAndOpacity(Color);
     // Half full is the neutral resting point, so the fill edge reads as a needle.
     Meter->SetPercent(0.5f);
@@ -271,6 +405,43 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     const int32 RequiredParticipants = Hero ? FMath::Max(1, Hero->GetRequiredConsensusParticipants()) : 2;
     const int32 LocalIndex = ResolveLocalParticipantIndex();
 
+    if (HealthBar)
+    {
+        HealthBar->SetPercent(Hero ? Hero->GetHealthNormalized() : 0.0f);
+    }
+    if (HealthText)
+    {
+        const int32 CurrentHealth = Hero ? FMath::CeilToInt(Hero->GetHealth()) : 0;
+        const int32 MaxHealth = FMath::CeilToInt(UGlobalGameData::Get(this)->HeroMaxHealth);
+        HealthText->SetText(FText::FromString(FString::Printf(TEXT("%d / %d"), CurrentHealth, MaxHealth)));
+    }
+
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    DamageFeedbackRemaining = FMath::Max(0.0f, DamageFeedbackRemaining - InDeltaTime);
+    const float VignetteAlpha = Data->HeroDamageVignetteDuration > 0.0f
+        ? FMath::Square(DamageFeedbackRemaining / Data->HeroDamageVignetteDuration) * DamageFeedbackStrength
+        : 0.0f;
+    for (int32 Index = 0; Index < DamageVignetteEdges.Num(); ++Index)
+    {
+        UBorder* Edge = DamageVignetteEdges[Index];
+        if (Edge)
+        {
+            FLinearColor Color = Data->HeroDamageVignetteColor;
+            const float Weight = DamageVignetteWeights.IsValidIndex(Index) ? DamageVignetteWeights[Index] : 1.0f;
+            Color.A *= FMath::Clamp(VignetteAlpha, 0.0f, 1.0f) * Weight;
+            Edge->SetBrushColor(Color);
+        }
+    }
+
+    FireFeedbackRemaining = FMath::Max(0.0f, FireFeedbackRemaining - InDeltaTime);
+    if (CrosshairCircle)
+    {
+        const bool bShotFlash = FireFeedbackRemaining > 0.0f;
+        CrosshairCircle->SetBrushColor(bShotFlash
+            ? (bLastShotHit ? FLinearColor(0.15f, 1.0f, 0.25f, 1.0f) : FLinearColor(1.0f, 0.55f, 0.05f, 1.0f))
+            : Data->CrosshairDotColor);
+    }
+
     for (int32 Index = 0; Index < LegendChips.Num(); ++Index)
     {
         if (UBorder* Chip = LegendChips[Index])
@@ -285,7 +456,7 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     }
 
     // Axis meters. 0.5 is centre; the fill edge swings either side of it with the mouse delta.
-    const float MeterRange = FMath::Max(0.01f, UGlobalGameData::Get(this)->LookMeterRange);
+    const float MeterRange = FMath::Max(0.01f, Data->LookMeterRange);
     for (int32 Index = 0; Index < AxisMeters.Num(); ++Index)
     {
         UProgressBar* Meter = AxisMeters[Index];

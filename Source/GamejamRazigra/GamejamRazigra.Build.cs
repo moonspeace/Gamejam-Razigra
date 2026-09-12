@@ -9,7 +9,7 @@ public class GamejamRazigra : ModuleRules
         PublicDependencyModuleNames.AddRange(new[]
         {
             "Core", "CoreUObject", "Engine", "InputCore", "UMG",
-            "OnlineSubsystem", "OnlineSubsystemEOS", "OnlineSubsystemUtils", "NavigationSystem", "AIModule"
+            "OnlineSubsystem", "OnlineSubsystemEOS", "OnlineSubsystemUtils", "NavigationSystem", "AIModule", "EngineCameras"
         });
 
         PrivateDependencyModuleNames.AddRange(new[] { "Slate", "SlateCore" });

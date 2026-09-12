@@ -43,6 +43,14 @@ Aiming is a consensus action too. Both players' mouse deltas must arrive within 
 
 While a player is waiting for the others, the view is held on black and fades up over `GlobalGameData.GameplayFadeInSeconds` the moment the shared hero appears.
 
+## Combat feedback
+
+The native gameplay HUD draws a centre-screen aim dot and a replicated hero health bar. LMB traces from the camera through that dot; `GlobalGameData.FireDamage`, `FireRange`, and `FireInterval` control the server-authoritative shot. Zombie hits create client-local floating world-space numbers above the target. Their font, colour, size, height, rise speed, and lifetime are under **UI|Damage Numbers** in `GlobalGameData`.
+
+Zombie attacks now start their attack state and animation first, then apply `ZombieAttackDamage` only after `ZombieAttackWindupSeconds`. The hero must still be inside `ZombieAttackRange` when that delay expires, so moving away dodges the hit. `On Zombie Attack` is the Blueprint attack-tell hook, while `On Zombie Attack Resolved` reports whether the delayed strike connected.
+
+Hero damage flashes red screen-edge bands and starts the camera shake selected by `HeroDamageCameraShakeClass`. Tune its colour, duration, and shake scale under **UI|Damage Feedback**. `On Hero Damaged` and `On Zombie Damaged` remain available to Blueprint children for additional audio, animation, particles, or hit reactions.
+
 ## Testing the consensus mechanic
 
 Without `Config/EOS.ini`, the project intentionally uses OnlineSubsystemNull for LAN/local testing. Start one standalone instance and choose **Host Game**, then start a second and choose **Find & Join Game**. The shared character only moves, looks, crouches, jumps, or fires while the matching input is active on both clients.

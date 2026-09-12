@@ -28,6 +28,12 @@ public:
     UFUNCTION(BlueprintCallable, Category="Razigra")
     void BindToSharedHero(ASharedHeroCharacter* Hero);
 
+    /** Local-only HUD and camera response to replicated hero damage. */
+    void HandleHeroDamaged(float DamageAmount);
+
+    /** Local-only crosshair response to a replicated shot. */
+    void HandleGunFired(bool bHit);
+
     UFUNCTION(BlueprintPure, Category="Razigra")
     int32 GetPlayerSlot() const { return PlayerSlot; }
 

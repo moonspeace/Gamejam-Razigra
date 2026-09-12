@@ -12,6 +12,14 @@
 	],
 	"Plugins": [
 		{
+			"Name": "EngineCameras",
+			"Enabled": true
+		},
+		{
+			"Name": "AudioGameplayVolume",
+			"Enabled": true
+		},
+		{
 			"Name": "OnlineSubsystemEOS",
 			"Enabled": true
 		},

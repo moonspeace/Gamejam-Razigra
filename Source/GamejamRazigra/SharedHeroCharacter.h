@@ -93,6 +93,9 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Died"))
     void BP_OnHeroDied();
 
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Damaged"))
+    void BP_OnHeroDamaged(float DamageAmount);
+
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Camera")
     TObjectPtr<USpringArmComponent> CameraBoom;
 
@@ -109,6 +112,9 @@ protected:
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastHeroDied();
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastHeroDamaged(float DamageAmount);
 
 private:
     static constexpr int32 ParticipantCount = 2;

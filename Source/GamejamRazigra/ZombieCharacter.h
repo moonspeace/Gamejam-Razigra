@@ -39,12 +39,25 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Zombie", meta=(DisplayName="On Zombie Died"))
     void BP_OnZombieDied();
 
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Zombie", meta=(DisplayName="On Zombie Damaged"))
+    void BP_OnZombieDamaged(float DamageAmount);
+
+    /** Fires after the wind-up, whether the hero remained in range or successfully dodged. */
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Zombie", meta=(DisplayName="On Zombie Attack Resolved"))
+    void BP_OnZombieAttackResolved(bool bHitHero);
+
 protected:
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastAttack();
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastDied();
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastDamageReceived(float DamageAmount);
+
+    UFUNCTION(NetMulticast, Unreliable)
+    void MulticastAttackResolved(bool bHitHero);
 
 private:
     UPROPERTY(Replicated)
@@ -61,8 +74,10 @@ private:
 
     double NextPathRefreshTime = 0.0;
     double NextAttackTime = 0.0;
-    double AttackVisualUntil = 0.0;
+    double AttackHitTime = 0.0;
 
     void AcquireTarget();
     void UpdateServerBehavior();
+    void StartAttack();
+    void ResolveAttack();
 };

@@ -163,6 +163,37 @@ void ACoopPlayerController::HideGameplayHud()
     }
 }
 
+void ACoopPlayerController::HandleHeroDamaged(float DamageAmount)
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+    if (!GameplayHud)
+    {
+        ShowGameplayHud();
+    }
+    if (GameplayHud)
+    {
+        GameplayHud->ShowDamageFeedback(DamageAmount);
+    }
+
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    if (PlayerCameraManager && Data->HeroDamageCameraShakeClass && Data->HeroDamageCameraShakeScale > 0.0f)
+    {
+        PlayerCameraManager->StartCameraShake(Data->HeroDamageCameraShakeClass,
+            Data->HeroDamageCameraShakeScale);
+    }
+}
+
+void ACoopPlayerController::HandleGunFired(bool bHit)
+{
+    if (IsLocalController() && GameplayHud)
+    {
+        GameplayHud->ShowFireFeedback(bHit);
+    }
+}
+
 void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCharacter* Hero)
 {
     BindToSharedHero(Hero);

@@ -148,7 +148,11 @@ int32 UCreateRazigraDataCommandlet::Main(const FString& Params)
         bSaved = false;
     }
 
-    const FString GameplayMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+    FString GameplayMap(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson"));
+    if (DataAsset && !DataAsset->GameplayMap.IsNull())
+    {
+        GameplayMap = DataAsset->GameplayMap.ToSoftObjectPath().GetLongPackageName();
+    }
     if (UWorld* World = UEditorLoadingAndSavingUtils::LoadMap(GameplayMap))
     {
         if (World->GetWorldSettings()->DefaultGameMode != ACoopGameMode::StaticClass())

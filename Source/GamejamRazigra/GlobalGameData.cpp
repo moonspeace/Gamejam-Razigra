@@ -5,6 +5,7 @@
 #include "SharedHeroCharacter.h"
 #include "ZombieCharacter.h"
 #include "GamejamRazigra.h"
+#include "HeroDamageCameraShake.h"
 #include "Styling/CoreStyle.h"
 
 namespace RazigraData
@@ -27,6 +28,8 @@ UGlobalGameData::UGlobalGameData()
     GameplayMap = TSoftObjectPtr<UWorld>(FSoftObjectPath(TEXT("/Game/ThirdPerson/Lvl_ThirdPerson.Lvl_ThirdPerson")));
     ZombieMesh = TSoftObjectPtr<USkeletalMesh>(FSoftObjectPath(TEXT("/Game/ZombieMale_AAB/Meshes/SKM_ZombieM_Male_WholeBody.SKM_ZombieM_Male_WholeBody")));
     ZombieAnimationClass = TSoftClassPtr<UAnimInstance>(FSoftObjectPath(TEXT("/Game/ZombieMale_AAB/Animations/ABP_Zombie.ABP_Zombie_C")));
+    DamageNumberFont = TSoftObjectPtr<UFont>(FSoftObjectPath(TEXT("/Engine/EngineFonts/Roboto.Roboto")));
+    HeroDamageCameraShakeClass = UHeroDamageCameraShake::StaticClass();
 }
 
 TSubclassOf<ASharedHeroCharacter> UGlobalGameData::GetHeroClass() const

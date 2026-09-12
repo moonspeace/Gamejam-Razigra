@@ -8,8 +8,10 @@
 class ASharedHeroCharacter;
 class AZombieCharacter;
 class UAnimInstance;
+class UCameraShakeBase;
 class UCoopHudWidget;
 class UCoopMenuWidget;
+class UFont;
 
 /**
  * The one gameplay-data object for Razigra. Create Blueprint children when a
@@ -94,6 +96,12 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
     FName MuzzleSocketName = TEXT("Muzzle");
 
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Crosshair", meta=(ClampMin="1"))
+    float CrosshairDotSize = 6.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Crosshair")
+    FLinearColor CrosshairDotColor = FLinearColor::White;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0"))
     float ZombieMaxHealth = 50.0f;
 
@@ -108,6 +116,10 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombieAttackInterval = 1.0f;
+
+    /** Delay between the attack tell/animation starting and damage being applied. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0"))
+    float ZombieAttackWindupSeconds = 0.65f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombiePathRefreshInterval = 0.35f;
@@ -135,6 +147,42 @@ public:
     /** Multi-letter key caps (CTRL, SPACE, LMB). */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Fonts")
     FSlateFontInfo HudKeyLabelFont;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Health")
+    FLinearColor HeroHealthFillColor = FLinearColor(0.75f, 0.03f, 0.03f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Health")
+    FLinearColor HeroHealthBackgroundColor = FLinearColor(0.025f, 0.025f, 0.025f, 0.9f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers")
+    TSoftObjectPtr<UFont> DamageNumberFont;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers")
+    FLinearColor DamageNumberColor = FLinearColor(1.0f, 0.12f, 0.04f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers", meta=(ClampMin="1"))
+    float DamageNumberWorldSize = 30.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers", meta=(ClampMin="0"))
+    float DamageNumberHeight = 125.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers", meta=(ClampMin="0"))
+    float DamageNumberRiseSpeed = 45.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers", meta=(ClampMin="0.05"))
+    float DamageNumberLifetime = 1.1f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Feedback")
+    FLinearColor HeroDamageVignetteColor = FLinearColor(0.8f, 0.0f, 0.0f, 0.58f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Feedback", meta=(ClampMin="0.05"))
+    float HeroDamageVignetteDuration = 0.45f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Feedback")
+    TSubclassOf<UCameraShakeBase> HeroDamageCameraShakeClass;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Feedback", meta=(ClampMin="0"))
+    float HeroDamageCameraShakeScale = 1.0f;
 
     /**
      * When true the shared hero is not spawned until every required player has connected, so

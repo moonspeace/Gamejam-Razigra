@@ -6,6 +6,9 @@
 #include "GameFramework/SpringArmComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "CoopPlayerController.h"
+#include "DamageNumberActor.h"
+#include "DrawDebugHelpers.h"
 #include "Engine/SkeletalMesh.h"
 #include "GamejamRazigra.h"
 #include "GlobalGameData.h"
@@ -321,8 +324,10 @@ void ASharedHeroCharacter::FireGun()
     FiringVisualUntil = Now + FMath::Min(Data->FireInterval, 0.12f);
     bIsFiring = true;
 
+    // The HUD dot is screen center, which is the follow camera's forward vector.
     const FVector TraceStart = FollowCamera->GetComponentLocation();
-    const FVector TraceEnd = TraceStart + AimRotation.Vector() * Data->FireRange;
+    const FVector ShotDirection = FollowCamera->GetForwardVector();
+    const FVector TraceEnd = TraceStart + ShotDirection * Data->FireRange;
     FHitResult Hit;
     FCollisionQueryParams Params(SCENE_QUERY_STAT(RazigraGun), true, this);
     const bool bHit = GetWorld()->LineTraceSingleByChannel(Hit, TraceStart, TraceEnd, ECC_Visibility, Params);
@@ -331,9 +336,12 @@ void ASharedHeroCharacter::FireGun()
 
     if (IsValid(HitActor))
     {
-        UGameplayStatics::ApplyPointDamage(HitActor, Data->FireDamage, AimRotation.Vector(), Hit,
+        UGameplayStatics::ApplyPointDamage(HitActor, Data->FireDamage, ShotDirection, Hit,
             nullptr, this, UDamageType::StaticClass());
     }
+    UE_LOG(LogRazigra, Log, TEXT("Weapon fired: hit=%s actor=%s distance=%.0f."),
+        bHit ? TEXT("true") : TEXT("false"), HitActor ? *HitActor->GetName() : TEXT("none"),
+        FVector::Distance(TraceStart, FinalEnd));
     // Effects hang off the muzzle, not the camera, so a Blueprint child can attach them to the mesh.
     MulticastGunFired(GetMuzzleLocation(), FinalEnd, bHit, HitActor);
 }
@@ -355,6 +363,19 @@ void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQua
     const FVector_NetQuantize& ImpactPoint, bool bHit, AActor* HitActor)
 {
     BP_OnGunFired(MuzzleLocation, ImpactPoint, bHit, HitActor);
+    DrawDebugLine(GetWorld(), MuzzleLocation, ImpactPoint,
+        bHit ? FColor::Green : FColor::Orange, false, 0.10f, 0, 2.5f);
+    DrawDebugSphere(GetWorld(), MuzzleLocation, 7.0f, 8, FColor::Yellow, false, 0.08f, 0, 1.5f);
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        if (ACoopPlayerController* LocalController = Cast<ACoopPlayerController>(It->Get()))
+        {
+            if (LocalController->IsLocalController())
+            {
+                LocalController->HandleGunFired(bHit);
+            }
+        }
+    }
 }
 
 float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
@@ -366,6 +387,10 @@ float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
     }
     const float Applied = FMath::Min(Health, FMath::Max(0.0f, DamageAmount));
     Health -= Applied;
+    if (Applied > 0.0f)
+    {
+        MulticastHeroDamaged(Applied);
+    }
     if (Health <= 0.0f)
     {
         bIsDead = true;
@@ -373,6 +398,35 @@ float ASharedHeroCharacter::TakeDamage(float DamageAmount, FDamageEvent const& D
         MulticastHeroDied();
     }
     return Applied;
+}
+
+void ASharedHeroCharacter::MulticastHeroDamaged_Implementation(float DamageAmount)
+{
+    BP_OnHeroDamaged(DamageAmount);
+    if (!GetWorld())
+    {
+        return;
+    }
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        if (ACoopPlayerController* LocalCoopController = Cast<ACoopPlayerController>(It->Get()))
+        {
+            if (LocalCoopController->IsLocalController())
+            {
+                LocalCoopController->HandleHeroDamaged(DamageAmount);
+                const UGlobalGameData* Data = UGlobalGameData::Get(this);
+                FActorSpawnParameters Params;
+                Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+                Params.ObjectFlags |= RF_Transient;
+                const FVector NumberLocation = GetActorLocation() + FVector::UpVector * Data->DamageNumberHeight;
+                if (ADamageNumberActor* Number = GetWorld()->SpawnActor<ADamageNumberActor>(
+                    ADamageNumberActor::StaticClass(), NumberLocation, FRotator::ZeroRotator, Params))
+                {
+                    Number->InitializeDamageNumber(DamageAmount, LocalCoopController);
+                }
+            }
+        }
+    }
 }
 
 void ASharedHeroCharacter::MulticastHeroDied_Implementation()
