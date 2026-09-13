@@ -32,7 +32,7 @@ unreal.MaterialEditingLibrary.connect_material_property(hglow, "", unreal.Materi
 unreal.MaterialEditingLibrary.recompile_material(healing)
 unreal.EditorAssetLibrary.save_loaded_asset(healing, only_if_is_dirty=False)
 
-# Fresnel rim plus animated noisy energy makes the shield translucent but visually active.
+# Original translucent Fresnel sphere around the full character.
 shield = unreal.EditorAssetLibrary.load_asset("/Game/Materials/M_PlayerShield")
 if shield is None:
     shield = tools.create_asset("M_PlayerShield", "/Game/Materials", unreal.Material, unreal.MaterialFactoryNew())
@@ -56,4 +56,5 @@ unreal.MaterialEditingLibrary.connect_material_expressions(fresnel, "", opacity_
 unreal.MaterialEditingLibrary.connect_material_property(opacity_scale, "", unreal.MaterialProperty.MP_OPACITY)
 unreal.MaterialEditingLibrary.recompile_material(shield)
 unreal.EditorAssetLibrary.save_loaded_asset(shield, only_if_is_dirty=False)
+
 unreal.log("Created Zombie Zero ability materials")

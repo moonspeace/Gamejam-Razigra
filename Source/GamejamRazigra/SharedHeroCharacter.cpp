@@ -20,6 +20,8 @@
 #include "Materials/MaterialInstanceDynamic.h"
 #include "Materials/MaterialInterface.h"
 #include "Net/UnrealNetwork.h"
+#include "Particles/ParticleSystem.h"
+#include "ZombieCharacter.h"
 
 ASharedHeroCharacter::ASharedHeroCharacter()
 {
@@ -153,6 +155,7 @@ void ASharedHeroCharacter::Tick(float DeltaSeconds)
 {
     Super::Tick(DeltaSeconds);
     AbilityVisualTime += DeltaSeconds;
+    UpdateShieldVisual(DeltaSeconds);
     if (bHealingActive && HealingEffectMeshes.Num() == 6)
     {
         const UGlobalGameData* Data = UGlobalGameData::Get(this);
@@ -245,6 +248,32 @@ void ASharedHeroCharacter::UpdateRecoilHeat(float DeltaSeconds)
     }
 }
 
+void ASharedHeroCharacter::UpdateShieldVisual(float DeltaSeconds)
+{
+    if (!ShieldDynamicMaterial)
+    {
+        return;
+    }
+
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    const float TargetAlpha = bShieldActive ? 1.0f : 0.0f;
+    const float FadeSeconds = bShieldActive ? Data->ShieldFadeInSeconds : Data->ShieldFadeOutSeconds;
+    ShieldVisualAlpha = FMath::FInterpConstantTo(
+        ShieldVisualAlpha, TargetAlpha, DeltaSeconds, 1.0f / FMath::Max(0.01f, FadeSeconds));
+
+    const float BaseIntensity = FMath::Max(4.0f, Data->ShieldEmissiveIntensity);
+    ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Intensity"), BaseIntensity * ShieldVisualAlpha);
+    ShieldDynamicMaterial->SetScalarParameterValue(TEXT("HexIntensity"),
+        Data->ShieldHexEmissiveIntensity * ShieldVisualAlpha);
+    ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"),
+        Data->ShieldColor.A * ShieldVisualAlpha);
+
+    if (!bShieldActive && ShieldVisualAlpha <= KINDA_SMALL_NUMBER)
+    {
+        ShieldMesh->SetVisibility(false, true);
+    }
+}
+
 void ASharedHeroCharacter::TriggerWeaponOverheat()
 {
     if (bWeaponOverheated) return;
@@ -300,19 +329,24 @@ void ASharedHeroCharacter::ConfigureAbilityVisuals()
     if (UStaticMesh* Sphere = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")))
     {
         ShieldMesh->SetStaticMesh(Sphere);
+        // The translucent mesh is the defensive volume and envelops the whole character.
+        ShieldMesh->SetRelativeLocation(FVector::ZeroVector);
         ShieldMesh->SetRelativeScale3D(FVector(Data->ShieldRadius / 50.0f));
     }
     UMaterialInterface* Base = Data->ShieldMaterial.LoadSynchronous();
-    if (!Base)
+    if (!Base || Base->GetPathName() == TEXT("/Game/Materials/M_PlayerShield.M_PlayerShield")
+        || Base->GetPathName() == TEXT("/Game/Materials/M_PlayerShieldSphere.M_PlayerShieldSphere"))
     {
-        Base = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Materials/M_PlayerShield.M_PlayerShield"));
+        Base = LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Materials/M_PlayerShieldHexBold.M_PlayerShieldHexBold"));
     }
     if (Base)
     {
         ShieldDynamicMaterial = UMaterialInstanceDynamic::Create(Base, this);
         ShieldDynamicMaterial->SetVectorParameterValue(TEXT("EffectColor"), Data->ShieldColor);
-        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Intensity"), Data->ShieldEmissiveIntensity);
-        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), Data->ShieldColor.A);
+        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Intensity"), 0.0f);
+        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("HexIntensity"), 0.0f);
+        ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"), 0.0f);
         ShieldMesh->SetMaterial(0, ShieldDynamicMaterial);
     }
     if (UStaticMesh* Cube = LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube")))
@@ -356,7 +390,12 @@ void ASharedHeroCharacter::OnRep_AbilityState()
     {
         PlusPiece->SetVisibility(bHealingActive, true);
     }
-    ShieldMesh->SetVisibility(bShieldActive, true);
+    // Activation must be visible immediately so Tick can fade it in. Deactivation remains
+    // visible until UpdateShieldVisual finishes fading the material to zero.
+    if (bShieldActive)
+    {
+        ShieldMesh->SetVisibility(true, true);
+    }
     // Zombies use the Pawn object channel. Ignoring that channel on the hero makes collision
     // non-blocking in both directions for every existing and newly spawned zombie, without
     // disabling zombie/world collision (which would make them fall through the level).
@@ -658,6 +697,35 @@ void ASharedHeroCharacter::MulticastGunFired_Implementation(const FVector_NetQua
     const FVector_NetQuantize& ImpactPoint, bool bHit, AActor* HitActor)
 {
     BP_OnGunFired(MuzzleLocation, ImpactPoint, bHit, HitActor);
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    UParticleSystem* MuzzleFX = Data->WeaponMuzzleParticle.LoadSynchronous();
+    if (!MuzzleFX)
+    {
+        MuzzleFX = LoadObject<UParticleSystem>(nullptr,
+            TEXT("/Game/ParagonMurdock/FX/Particles/Abilities/Primary/FX/P_Murdock_STD_MUZZLE.P_Murdock_STD_MUZZLE"));
+    }
+    const FVector ShotDirection = (FVector(ImpactPoint) - FVector(MuzzleLocation)).GetSafeNormal();
+    if (MuzzleFX)
+    {
+        // The compact spherical burst is the laser's terminal energy bloom, not a muzzle flash.
+        UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), MuzzleFX,
+            FTransform((-ShotDirection).Rotation(), ImpactPoint,
+                FVector(Data->WeaponMuzzleParticleScale)), true);
+    }
+    if (bHit && Cast<AZombieCharacter>(HitActor))
+    {
+        UParticleSystem* HitFX = Data->ZombieHitParticle.LoadSynchronous();
+        if (!HitFX)
+        {
+            HitFX = LoadObject<UParticleSystem>(nullptr,
+                TEXT("/Game/ParagonMurdock/FX/Particles/Abilities/SpreadShot/FX/P_SpreadShotImpact.P_SpreadShotImpact"));
+        }
+        if (HitFX)
+        {
+            UGameplayStatics::SpawnEmitterAtLocation(GetWorld(), HitFX,
+                FTransform((-ShotDirection).Rotation(), ImpactPoint, FVector(Data->ZombieHitParticleScale)), true);
+        }
+    }
     FActorSpawnParameters TraceParams;
     TraceParams.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
     TraceParams.ObjectFlags |= RF_Transient;

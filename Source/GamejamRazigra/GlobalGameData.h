@@ -15,6 +15,21 @@ class UCoopHudWidget;
 class UCoopMenuWidget;
 class UFont;
 class UMaterialInterface;
+class UParticleSystem;
+class USkeletalMesh;
+
+/** One modular clothing layer (torso, legs, hat, etc.) with any number of alternatives. */
+USTRUCT(BlueprintType)
+struct FZombieClothingSlot
+{
+    GENERATED_BODY()
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    FName SlotName = NAME_None;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly)
+    TArray<TSoftObjectPtr<USkeletalMesh>> Variations;
+};
 
 /**
  * The one gameplay-data object for Razigra. Create Blueprint children when a
@@ -70,6 +85,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftObjectPtr<USkeletalMesh> ZombieMesh;
 
+    /** Modular clothing layers driven by the base ZombieMesh through Leader Pose Component. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
+    TArray<FZombieClothingSlot> ZombieClothingSlots;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation")
     TSoftClassPtr<UAnimInstance> ZombieAnimationClass;
 
@@ -112,7 +131,16 @@ public:
     FLinearColor ShieldColor = FLinearColor(0.0f, 0.12f, 0.65f, 0.10f);
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
-    float ShieldEmissiveIntensity = 2.0f;
+    float ShieldEmissiveIntensity = 6.5f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
+    float ShieldHexEmissiveIntensity = 1.35f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0.01"))
+    float ShieldFadeInSeconds = 0.16f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0.01"))
+    float ShieldFadeOutSeconds = 0.24f;
 
     /** Shared recoil heat consumed per second while the shield is held. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
@@ -183,6 +211,13 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Laser", meta=(ClampMin="0"))
     float LaserTraceIntensity = 35.0f;
+
+    /** Compact energy burst placed at the laser endpoint (despite the legacy property name). */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX")
+    TSoftObjectPtr<UParticleSystem> WeaponMuzzleParticle;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|VFX", meta=(ClampMin="0.01"))
+    float WeaponMuzzleParticleScale = 0.12f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Crosshair", meta=(ClampMin="1"))
     float CrosshairDotSize = 6.0f;
@@ -264,6 +299,12 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect", meta=(ClampMin="0"))
     float ZombieHitFlashIntensity = 3.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect")
+    TSoftObjectPtr<UParticleSystem> ZombieHitParticle;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect", meta=(ClampMin="0.01"))
+    float ZombieHitParticleScale = 0.45f;
 
     /** Masked unlit material used for the red blink and dissolve death effect. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect")
