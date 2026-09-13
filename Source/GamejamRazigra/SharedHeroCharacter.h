@@ -67,6 +67,48 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Animation")
     bool IsCharacterFiring() const { return bIsFiring; }
 
+    /**
+     * Degrees per second the hero swings round to face the aim yaw. High values feel snappy and
+     * keep the crosshair and the body aligned; lower ones let the body trail the camera.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Razigra|Animation", meta=(ClampMin="30"))
+    float TurnRateDegreesPerSecond = 500.0f;
+
+    /** Horizontal speed: the value a locomotion blend space's Speed axis expects. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Animation")
+    float GetGroundSpeed() const;
+
+    /**
+     * Angle between where the hero faces and where it is actually travelling, -180..180.
+     * Computed exactly the way UKismetAnimationLibrary::CalculateDirection does, so the
+     * Direction axis of a third-person blend space reads the same as on the template character.
+     */
+    UFUNCTION(BlueprintPure, Category="Razigra|Animation")
+    float GetMovementDirection() const;
+
+    /**
+     * Whether locomotion should play. Speed-based on purpose: the template character tests
+     * GetCurrentAcceleration(), but input acceleration is not replicated, and on a simulated
+     * proxy character movement substitutes the normalised velocity for it. The shared hero is
+     * a simulated proxy everywhere except the host, so speed is the one signal that means the
+     * same thing on every machine.
+     */
+    UFUNCTION(BlueprintPure, Category="Razigra|Animation")
+    bool ShouldMove() const;
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Animation")
+    float GetAimPitch() const;
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Animation")
+    float GetAimYaw() const;
+
+    /**
+     * Nothing ever possesses the shared hero, and an unpossessed pawn reports zero pitch here,
+     * which leaves any aim-offset blend space stuck at its centre. Report the replicated
+     * consensus aim instead. Aim offsets and weapon aiming read this; movement never does.
+     */
+    virtual FRotator GetBaseAimRotation() const override;
+
     UFUNCTION(BlueprintPure, Category="Razigra|State")
     bool IsDead() const { return bIsDead; }
 

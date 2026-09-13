@@ -32,9 +32,15 @@ ASharedHeroCharacter::ASharedHeroCharacter()
     GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
     GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -96.0f), FRotator(0.0f, -90.0f, 0.0f));
     GetCharacterMovement()->bRunPhysicsWithNoController = true;
+    // The hero faces wherever the players are aiming and strafes around that, so character
+    // movement must not swing it round to face its own velocity.
     GetCharacterMovement()->bOrientRotationToMovement = false;
+    GetCharacterMovement()->bUseControllerDesiredRotation = false;
+    GetCharacterMovement()->RotationRate = FRotator(0.0f, TurnRateDegreesPerSecond, 0.0f);
     GetCharacterMovement()->NavAgentProps.bCanCrouch = true;
+    bUseControllerRotationPitch = false;
     bUseControllerRotationYaw = false;
+    bUseControllerRotationRoll = false;
 
     CameraBoom = CreateDefaultSubobject<USpringArmComponent>(TEXT("CameraBoom"));
     CameraBoom->SetupAttachment(RootComponent);
@@ -75,6 +81,7 @@ void ASharedHeroCharacter::BeginPlay()
     GetCharacterMovement()->MaxWalkSpeed = Data->WalkSpeed;
     GetCharacterMovement()->MaxWalkSpeedCrouched = Data->CrouchedSpeed;
     GetCharacterMovement()->JumpZVelocity = Data->JumpVelocity;
+    GetCharacterMovement()->RotationRate = FRotator(0.0f, TurnRateDegreesPerSecond, 0.0f);
 
     EnsureVisibleMesh();
     ConfigureCamera();
@@ -402,12 +409,13 @@ void ASharedHeroCharacter::ProcessMovement()
     AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X), ForwardValue);
     AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y), RightValue);
 
-    if (!FMath::IsNearlyZero(ForwardValue) || !FMath::IsNearlyZero(RightValue))
-    {
-        const FVector Direction = (FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X) * ForwardValue
-            + FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y) * RightValue).GetSafeNormal();
-        SetActorRotation(FMath::RInterpTo(GetActorRotation(), Direction.Rotation(), GetWorld()->GetDeltaSeconds(), 12.0f));
-    }
+    // Face the aim at all times, moving or not. The input above is relative to this same yaw,
+    // so W walks toward the crosshair and A/D strafe around it rather than turning into it.
+    // That separation is what gives the locomotion blend space a Direction worth blending:
+    // facing the velocity would pin Direction at zero and only ever play the forward animation.
+    const FRotator Facing = FMath::RInterpConstantTo(GetActorRotation(), YawOnly,
+        GetWorld()->GetDeltaSeconds(), TurnRateDegreesPerSecond);
+    SetActorRotation(FRotator(0.0f, Facing.Yaw, 0.0f));
 }
 
 void ASharedHeroCharacter::ProcessLook()
@@ -629,6 +637,45 @@ bool ASharedHeroCharacter::IsCharacterJumping() const
 bool ASharedHeroCharacter::IsCharacterFalling() const
 {
     return GetCharacterMovement()->IsFalling();
+}
+
+float ASharedHeroCharacter::GetGroundSpeed() const
+{
+    return GetVelocity().Size2D();
+}
+
+float ASharedHeroCharacter::GetMovementDirection() const
+{
+    const FVector Travel = GetVelocity();
+    if (Travel.IsNearlyZero())
+    {
+        return 0.0f;
+    }
+    const FMatrix Basis = FRotationMatrix(GetActorRotation());
+    const FVector Heading = Travel.GetSafeNormal2D();
+    const float Angle = FMath::RadiansToDegrees(FMath::Acos(
+        FMath::Clamp(static_cast<float>(FVector::DotProduct(Basis.GetScaledAxis(EAxis::X), Heading)), -1.0f, 1.0f)));
+    return FVector::DotProduct(Basis.GetScaledAxis(EAxis::Y), Heading) < 0.0 ? -Angle : Angle;
+}
+
+bool ASharedHeroCharacter::ShouldMove() const
+{
+    return !bIsDead && GetGroundSpeed() > 3.0f;
+}
+
+float ASharedHeroCharacter::GetAimPitch() const
+{
+    return FRotator::NormalizeAxis(AimRotation.Pitch);
+}
+
+float ASharedHeroCharacter::GetAimYaw() const
+{
+    return FRotator::NormalizeAxis(AimRotation.Yaw);
+}
+
+FRotator ASharedHeroCharacter::GetBaseAimRotation() const
+{
+    return FRotator(FRotator::NormalizeAxis(AimRotation.Pitch), FRotator::NormalizeAxis(AimRotation.Yaw), 0.0f);
 }
 
 bool ASharedHeroCharacter::IsCharacterMoving() const
