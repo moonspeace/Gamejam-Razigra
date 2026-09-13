@@ -148,6 +148,37 @@ void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
         HealthSlot->SetPadding(FMargin(0.0f, 34.0f, 0.0f, 0.0f));
     }
 
+    // Recoil sits directly under health, same width and shape, a little slimmer so the two read
+    // as a pair without competing.
+    USizeBox* RecoilBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroRecoilBox"));
+    RecoilBox->SetHeightOverride(9.0f);
+    RecoilBar = WidgetTree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("HeroRecoilBar"));
+    FProgressBarStyle RecoilStyle = RecoilBar->GetWidgetStyle();
+    RecoilStyle.BackgroundImage.DrawAs = ESlateBrushDrawType::RoundedBox;
+    RecoilStyle.BackgroundImage.OutlineSettings.CornerRadii = FVector4(4.5f);
+    RecoilStyle.BackgroundImage.TintColor = FSlateColor(Data->RecoilBarBackgroundColor);
+    RecoilStyle.FillImage.DrawAs = ESlateBrushDrawType::RoundedBox;
+    RecoilStyle.FillImage.OutlineSettings.CornerRadii = FVector4(4.5f);
+    RecoilStyle.FillImage.TintColor = FSlateColor(FLinearColor::White);
+    RecoilBar->SetWidgetStyle(RecoilStyle);
+    RecoilBar->SetFillColorAndOpacity(Data->RecoilBarFillColor);
+    RecoilBar->SetPercent(0.0f);
+    RecoilBox->SetContent(RecoilBar);
+
+    UHorizontalBox* RecoilWidthLayout = WidgetTree->ConstructWidget<UHorizontalBox>(
+        UHorizontalBox::StaticClass(), TEXT("HeroRecoilWidthLayout"));
+    USizeBox* RecoilLeftSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroRecoilLeftSpacer"));
+    USizeBox* RecoilRightSpacer = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("HeroRecoilRightSpacer"));
+    RecoilWidthLayout->AddChildToHorizontalBox(RecoilLeftSpacer)->SetSize(QuarterWidth);
+    RecoilWidthLayout->AddChildToHorizontalBox(RecoilBox)->SetSize(HalfWidth);
+    RecoilWidthLayout->AddChildToHorizontalBox(RecoilRightSpacer)->SetSize(QuarterWidth);
+    if (UOverlaySlot* RecoilSlot = Root->AddChildToOverlay(RecoilWidthLayout))
+    {
+        RecoilSlot->SetHorizontalAlignment(HAlign_Fill);
+        RecoilSlot->SetVerticalAlignment(VAlign_Top);
+        RecoilSlot->SetPadding(FMargin(0.0f, 52.0f, 0.0f, 0.0f));
+    }
+
     CrosshairBox = WidgetTree->ConstructWidget<USizeBox>(USizeBox::StaticClass(), TEXT("CrosshairCircleBox"));
     CrosshairBox->SetWidthOverride(Data->CrosshairDotSize);
     CrosshairBox->SetHeightOverride(Data->CrosshairDotSize);
@@ -589,6 +620,20 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         HealthBar->SetPercent(Hero ? Hero->GetHealthNormalized() : 0.0f);
     }
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
+
+    if (RecoilBar)
+    {
+        const bool bOverheated = Hero && Hero->IsWeaponOverheated();
+        RecoilBar->SetPercent(Hero ? Hero->GetRecoilHeat() : 0.0f);
+        OverheatFlashTime = bOverheated ? OverheatFlashTime + InDeltaTime : 0.0f;
+        // Locked out: pulse so a full bar cannot be mistaken for a merely hot one.
+        FLinearColor RecoilColor = bOverheated ? Data->RecoilBarOverheatColor : Data->RecoilBarFillColor;
+        if (bOverheated)
+        {
+            RecoilColor.A *= 0.55f + 0.45f * FMath::Abs(FMath::Sin(OverheatFlashTime * 9.0f));
+        }
+        RecoilBar->SetFillColorAndOpacity(RecoilColor);
+    }
     DamageFeedbackRemaining = FMath::Max(0.0f, DamageFeedbackRemaining - InDeltaTime);
     const float VignetteAlpha = Data->HeroDamageVignetteDuration > 0.0f
         ? FMath::Square(DamageFeedbackRemaining / Data->HeroDamageVignetteDuration) * DamageFeedbackStrength

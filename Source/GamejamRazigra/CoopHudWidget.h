@@ -72,6 +72,9 @@ private:
     TObjectPtr<UProgressBar> HealthBar;
 
     UPROPERTY()
+    TObjectPtr<UProgressBar> RecoilBar;
+
+    UPROPERTY()
     TArray<TObjectPtr<UBorder>> DamageVignetteEdges;
 
     UPROPERTY()
@@ -100,6 +103,7 @@ private:
     bool bGameOverShown = false;
     int32 DisplayedKillCount = 0;
     float KillSmashRemaining = 0.0f;
+    float OverheatFlashTime = 0.0f;
 
     void BuildCombatIndicators(class UOverlay* Root);
     void BuildDamageVignette(class UOverlay* Root);

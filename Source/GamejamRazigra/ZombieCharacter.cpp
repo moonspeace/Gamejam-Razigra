@@ -39,6 +39,16 @@ AZombieCharacter::AZombieCharacter()
     GetCharacterMovement()->RotationRate = FRotator(0.0f, 420.0f, 0.0f);
     // Camera weapon traces use Visibility. Pawn collision ignores it by default.
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+
+    // These two must be set here and not in BeginPlay. ACharacter::PostInitializeComponents caches
+    // the mesh's relative transform into BaseTranslationOffset/BaseRotationOffset, and that runs
+    // BEFORE BeginPlay. On clients the movement component's network smoothing rebuilds the mesh
+    // transform from those cached values every frame, so an offset applied later is thrown away:
+    // the mesh snaps back to the capsule centre and un-rotated, which is the zombie floating a
+    // capsule's height off the ground and facing ninety degrees off. The server never smooths, so
+    // it looked correct there.
+    GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
+    GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -96.0f), FRotator(0.0f, -90.0f, 0.0f));
 }
 
 void AZombieCharacter::BeginPlay()
@@ -50,8 +60,8 @@ void AZombieCharacter::BeginPlay()
 
     if (USkeletalMesh* MeshAsset = Data->ZombieMesh.LoadSynchronous())
     {
+        // Mesh asset only: its relative transform belongs in the constructor, see the note there.
         GetMesh()->SetSkeletalMeshAsset(MeshAsset);
-        GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -96.0f), FRotator(0.0f, -90.0f, 0.0f));
     }
     if (UClass* AnimationClass = Data->ZombieAnimationClass.LoadSynchronous())
     {

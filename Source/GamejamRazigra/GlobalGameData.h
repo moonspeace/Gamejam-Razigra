@@ -247,6 +247,17 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Health")
     FLinearColor HeroHealthBackgroundColor = FLinearColor(0.025f, 0.025f, 0.025f, 0.9f);
 
+    /** Recoil bar as it fills up. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Recoil")
+    FLinearColor RecoilBarFillColor = FLinearColor(1.0f, 0.55f, 0.05f, 1.0f);
+
+    /** Recoil bar once the weapon has overheated and is counting down. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Recoil")
+    FLinearColor RecoilBarOverheatColor = FLinearColor(1.0f, 0.10f, 0.05f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Recoil")
+    FLinearColor RecoilBarBackgroundColor = FLinearColor(0.025f, 0.025f, 0.025f, 0.9f);
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Damage Numbers")
     TSoftObjectPtr<UFont> DamageNumberFont;
 
