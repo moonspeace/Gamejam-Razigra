@@ -7,6 +7,7 @@
 #include "CoopPlayerController.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "EOSSessionSubsystem.h"
 #include "Net/UnrealNetwork.h"
 #include "PuzzleBoardWidget.h"
 #include "SharedHeroCharacter.h"
@@ -209,6 +210,19 @@ void AHologramPuzzle::SubmitInput(int32 ParticipantIndex, EPuzzleInput Input)
         return;
     }
 
+    // Solo uses the exact same board and controls, but one local player represents the whole
+    // consensus. This also covers PIE/standalone tests before the session subsystem is ready.
+    const UEOSSessionSubsystem* Sessions = GetGameInstance()
+        ? GetGameInstance()->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
+    if (GetNetMode() == NM_Standalone || (Sessions && Sessions->IsSinglePlayerMode()))
+    {
+        PendingInputTime[0] = 0.0;
+        PendingInputTime[1] = 0.0;
+        RefreshPendingMask();
+        RunInput(Input);
+        return;
+    }
+
     const bool bNeedsConsensus = bRequireConsensusForSelection || Input == EPuzzleInput::Activate;
     if (!bNeedsConsensus)
     {
@@ -405,4 +419,5 @@ void AHologramPuzzle::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutL
     DOREPLIFETIME(AHologramPuzzle, SelectedCell);
     DOREPLIFETIME(AHologramPuzzle, bFocused);
     DOREPLIFETIME(AHologramPuzzle, bSolved);
+    DOREPLIFETIME(AHologramPuzzle, PendingInputMask);
 }

@@ -311,10 +311,9 @@ void ACoopPlayerController::ServerTogglePuzzleInteraction_Implementation()
 
 void ACoopPlayerController::ServerPuzzleInput_Implementation(EPuzzleDirection Direction, bool bActivate)
 {
-    if (PlayerSlot == INDEX_NONE)
-    {
-        return;
-    }
+    // A standalone solo controller may issue its first puzzle input before PlayerSlot has
+    // replicated. Treat it as participant zero; the actor itself still enforces multiplayer.
+    const int32 PuzzleParticipant = PlayerSlot == INDEX_NONE ? 0 : PlayerSlot;
     EPuzzleInput Input = EPuzzleInput::Activate;
     if (!bActivate)
     {
@@ -330,7 +329,7 @@ void ACoopPlayerController::ServerPuzzleInput_Implementation(EPuzzleDirection Di
     {
         if (!It->IsFocused()) continue;
         // The board waits for both players, so hand it the slot that asked.
-        It->SubmitInput(PlayerSlot, Input);
+        It->SubmitInput(PuzzleParticipant, Input);
         return;
     }
 }
