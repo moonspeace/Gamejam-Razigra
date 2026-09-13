@@ -180,6 +180,23 @@ void ACoopPlayerController::ShowGameplayHud()
     if (GameplayHud)
     {
         GameplayHud->AddToViewport(10);
+        if (PendingCinematicStartTime >= 0.0)
+        {
+            GameplayHud->PlayIntroCinematic(PendingCinematicStartTime);
+        }
+    }
+}
+
+void ACoopPlayerController::StartLevelCinematic(double ServerStartTime)
+{
+    if (!IsLocalController())
+    {
+        return;
+    }
+    PendingCinematicStartTime = ServerStartTime;
+    if (GameplayHud)
+    {
+        GameplayHud->PlayIntroCinematic(ServerStartTime);
     }
 }
 

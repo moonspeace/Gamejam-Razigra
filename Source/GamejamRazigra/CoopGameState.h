@@ -26,8 +26,12 @@ public:
     UPROPERTY(Replicated, BlueprintReadOnly, Category="Zombie Zero|Score")
     int32 ZombieKillCount = 0;
 
+    UPROPERTY(ReplicatedUsing=OnRep_CinematicStartTime, BlueprintReadOnly, Category="Zombie Zero|Cinematic")
+    double CinematicStartServerTime = -1.0;
+
     void AddZombieKill();
     void ResetZombieKills();
+    void StartIntroCinematic();
 
     UFUNCTION()
     void OnRep_SharedHero();
@@ -35,4 +39,7 @@ public:
     /** Keeps a joining client's front end in step with the host's lobby. */
     UFUNCTION()
     void OnRep_LobbyPopulation();
+
+    UFUNCTION()
+    void OnRep_CinematicStartTime();
 };

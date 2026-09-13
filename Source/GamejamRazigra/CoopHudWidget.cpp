@@ -5,6 +5,7 @@
 #include "Components/Button.h"
 #include "Components/HorizontalBox.h"
 #include "Components/HorizontalBoxSlot.h"
+#include "Components/Image.h"
 #include "Components/Overlay.h"
 #include "Components/OverlaySlot.h"
 #include "Components/PanelWidget.h"
@@ -17,6 +18,10 @@
 #include "CoopPlayerController.h"
 #include "Engine/World.h"
 #include "GlobalGameData.h"
+#include "FileMediaSource.h"
+#include "MediaPlayer.h"
+#include "MediaSoundComponent.h"
+#include "MediaTexture.h"
 
 namespace RazigraHud
 {
@@ -108,6 +113,84 @@ void UCoopHudWidget::NativeOnInitialized()
     {
         MeterSlot->SetVerticalAlignment(VAlign_Center);
     }
+    BuildCinematicOverlay(Root);
+}
+
+void UCoopHudWidget::BuildCinematicOverlay(UOverlay* Root)
+{
+    CinematicOverlay = WidgetTree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("CinematicOverlay"));
+    CinematicOverlay->SetBrushColor(FLinearColor::Black);
+    CinematicOverlay->SetVisibility(ESlateVisibility::Collapsed);
+    CinematicImage = WidgetTree->ConstructWidget<UImage>(UImage::StaticClass(), TEXT("CinematicImage"));
+    CinematicOverlay->SetContent(CinematicImage);
+    if (UOverlaySlot* CinematicSlot = Root->AddChildToOverlay(CinematicOverlay))
+    {
+        CinematicSlot->SetHorizontalAlignment(HAlign_Fill);
+        CinematicSlot->SetVerticalAlignment(VAlign_Fill);
+    }
+}
+
+void UCoopHudWidget::PlayIntroCinematic(double ServerStartTime)
+{
+    UFileMediaSource* Source = UGlobalGameData::Get(this)->LevelIntroCinematic.LoadSynchronous();
+    if (!Source || !CinematicImage)
+    {
+        return;
+    }
+
+    if (!CinematicPlayer)
+    {
+        CinematicPlayer = NewObject<UMediaPlayer>(this);
+        CinematicPlayer->PlayOnOpen = false;
+        CinematicPlayer->SetLooping(false);
+        CinematicPlayer->OnMediaOpened.AddDynamic(this, &ThisClass::HandleCinematicOpened);
+        CinematicPlayer->OnEndReached.AddDynamic(this, &ThisClass::HandleCinematicEnded);
+
+        CinematicTexture = NewObject<UMediaTexture>(this);
+        CinematicTexture->SetMediaPlayer(CinematicPlayer);
+        CinematicTexture->UpdateResource();
+        FSlateBrush Brush;
+        Brush.SetResourceObject(CinematicTexture);
+        CinematicImage->SetBrush(Brush);
+
+        CinematicSound = NewObject<UMediaSoundComponent>(GetOwningPlayer());
+        CinematicSound->SetMediaPlayer(CinematicPlayer);
+        CinematicSound->SetVolumeMultiplier(UGlobalGameData::Get(this)->IntroCinematicVolume);
+        CinematicSound->RegisterComponent();
+    }
+
+    PendingCinematicServerTime = ServerStartTime;
+    bCinematicMediaReady = false;
+    CinematicPlayer->Close();
+    CinematicPlayer->OpenSource(Source);
+}
+
+void UCoopHudWidget::HandleCinematicOpened(FString OpenedUrl)
+{
+    bCinematicMediaReady = true;
+}
+
+void UCoopHudWidget::HandleCinematicEnded()
+{
+    if (CinematicOverlay)
+    {
+        CinematicOverlay->SetVisibility(ESlateVisibility::Collapsed);
+    }
+    PendingCinematicServerTime = -1.0;
+    bCinematicMediaReady = false;
+}
+
+void UCoopHudWidget::NativeDestruct()
+{
+    if (CinematicPlayer)
+    {
+        CinematicPlayer->Close();
+    }
+    if (CinematicSound)
+    {
+        CinematicSound->DestroyComponent();
+    }
+    Super::NativeDestruct();
 }
 
 void UCoopHudWidget::BuildCombatIndicators(UOverlay* Root)
@@ -576,6 +659,32 @@ int32 UCoopHudWidget::ResolveLocalParticipantIndex() const
 void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+
+    if (bCinematicMediaReady && PendingCinematicServerTime >= 0.0 && CinematicPlayer)
+    {
+        const ACoopGameState* ClockState = GetWorld()
+            ? GetWorld()->GetGameState<ACoopGameState>() : nullptr;
+        if (ClockState)
+        {
+            const double OffsetSeconds = ClockState->GetServerWorldTimeSeconds()
+                - PendingCinematicServerTime;
+            if (OffsetSeconds >= 0.0)
+            {
+                const double DurationSeconds = CinematicPlayer->GetDuration().GetTotalSeconds();
+                if (DurationSeconds > 0.0 && OffsetSeconds >= DurationSeconds)
+                {
+                    HandleCinematicEnded();
+                }
+                else
+                {
+                    CinematicPlayer->Seek(FTimespan::FromSeconds(OffsetSeconds));
+                    CinematicPlayer->Play();
+                    CinematicOverlay->SetVisibility(ESlateVisibility::Visible);
+                    PendingCinematicServerTime = -1.0;
+                }
+            }
+        }
+    }
 
     // The HUD may be created before PlayerSlot arrives. Keep this synchronized so the host's
     // button becomes actionable as soon as slot replication completes instead of staying in its
