@@ -115,29 +115,35 @@ void AHologramPuzzle::BuildPuzzle()
 
     // Start bottom-left firing east, goal top-right. Every layout below was brute-forced
     // against the reflection rules above: each has exactly one solution and starts unsolved.
+    // Start bottom-left firing east, goal top-right. Each layout was brute-forced against the
+    // rules above, including the exit colour and the filters: one solution each, none pre-solved.
     Put(0, BoardHeight - 1, EPuzzleCellType::Start, 0, EPuzzleLaserColor::Red);
-    Put(BoardWidth - 1, 0, EPuzzleCellType::End);
 
     if (PuzzleId == 0)
     {
+        Put(4, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Green);
         Put(2, 4, EPuzzleCellType::Mirror, 1);
         Put(2, 1, EPuzzleCellType::Mirror, 0);
         Put(4, 1, EPuzzleCellType::Mirror, 3);
         Put(1, 4, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
+        Put(2, 2, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
         Put(3, 2, EPuzzleCellType::Blocker);
     }
     else if (PuzzleId == 1)
     {
+        Put(6, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Blue);
         Put(3, 6, EPuzzleCellType::Mirror, 2);
         Put(3, 2, EPuzzleCellType::Mirror, 0);
         Put(6, 2, EPuzzleCellType::Mirror, 1);
         Put(1, 6, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
         Put(3, 4, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
+        Put(3, 5, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
         Put(5, 6, EPuzzleCellType::Blocker);
         Put(1, 2, EPuzzleCellType::Blocker);
     }
     else
     {
+        Put(8, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Red);
         Put(2, 8, EPuzzleCellType::Mirror, 3);
         Put(2, 5, EPuzzleCellType::Mirror, 0);
         Put(5, 5, EPuzzleCellType::Mirror, 1);
@@ -146,6 +152,8 @@ void AHologramPuzzle::BuildPuzzle()
         Put(1, 8, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
         Put(3, 5, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
         Put(6, 7, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Red);
+        Put(2, 6, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
+        Put(4, 5, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Blue);
         Put(4, 8, EPuzzleCellType::Blocker);
         Put(2, 2, EPuzzleCellType::Blocker);
         Put(7, 5, EPuzzleCellType::Blocker);
@@ -173,8 +181,80 @@ void AHologramPuzzle::SetFocused(bool bNewFocused)
 {
     if (!HasAuthority() || bSolved || bFocused == bNewFocused) return;
     bFocused = bNewFocused;
+    PendingInputTime[0] = 0.0;
+    PendingInputTime[1] = 0.0;
+    PendingInputMask = 0;
     OnRep_State();
     ForceNetUpdate();
+}
+
+/**
+ * Collects one player's request and only acts once the other asks for the same thing inside
+ * ConsensusToleranceSeconds. The pair steers the board the same way they steer the hero: nothing
+ * moves until both of them want it.
+ */
+void AHologramPuzzle::SubmitInput(int32 ParticipantIndex, EPuzzleInput Input)
+{
+    if (!HasAuthority() || !bFocused || bSolved
+        || ParticipantIndex < 0 || ParticipantIndex >= PuzzleParticipantCount)
+    {
+        return;
+    }
+
+    const bool bNeedsConsensus = bRequireConsensusForSelection || Input == EPuzzleInput::Activate;
+    if (!bNeedsConsensus)
+    {
+        RunInput(Input);
+        return;
+    }
+
+    const double Now = GetWorld()->GetTimeSeconds();
+    const int32 Other = 1 - ParticipantIndex;
+    const bool bOtherAgrees = PendingInput[Other] == Input
+        && (Now - PendingInputTime[Other]) <= ConsensusToleranceSeconds;
+
+    if (bOtherAgrees)
+    {
+        // Both asked for it: spend both presses so a single hold cannot repeat the action.
+        PendingInputTime[0] = 0.0;
+        PendingInputTime[1] = 0.0;
+        RefreshPendingMask();
+        RunInput(Input);
+        return;
+    }
+
+    PendingInput[ParticipantIndex] = Input;
+    PendingInputTime[ParticipantIndex] = Now;
+    RefreshPendingMask();
+    OnRep_State();
+    ForceNetUpdate();
+}
+
+/** Publishes who is still waiting on whom so the board can show it. */
+void AHologramPuzzle::RefreshPendingMask()
+{
+    const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    int32 Mask = 0;
+    for (int32 Index = 0; Index < PuzzleParticipantCount; ++Index)
+    {
+        if (PendingInputTime[Index] > 0.0 && (Now - PendingInputTime[Index]) <= ConsensusToleranceSeconds)
+        {
+            Mask |= 1 << Index;
+        }
+    }
+    PendingInputMask = Mask;
+}
+
+void AHologramPuzzle::RunInput(EPuzzleInput Input)
+{
+    switch (Input)
+    {
+    case EPuzzleInput::MoveNorth: MoveSelection(EPuzzleDirection::North); break;
+    case EPuzzleInput::MoveEast:  MoveSelection(EPuzzleDirection::East);  break;
+    case EPuzzleInput::MoveSouth: MoveSelection(EPuzzleDirection::South); break;
+    case EPuzzleInput::MoveWest:  MoveSelection(EPuzzleDirection::West);  break;
+    default:                      ActivateSelection();                    break;
+    }
 }
 
 void AHologramPuzzle::MoveSelection(EPuzzleDirection Direction)
@@ -226,8 +306,12 @@ bool AHologramPuzzle::TraceLaser(TArray<FPuzzleLaserSegment>& OutPath) const
         if (Visited.Contains(StateKey)) return false;
         Visited.Add(StateKey);
         const FPuzzleCell& Cell = Cells[I];
-        if (Cell.Type == EPuzzleCellType::End) return true;
+        // The exit only accepts its own colour now, so the switches are part of the solution
+        // rather than decoration.
+        if (Cell.Type == EPuzzleCellType::End) return Color == Cell.Color;
         if (Cell.Type == EPuzzleCellType::Blocker) return false;
+        // Open square: its own colour passes straight through, anything else stops here.
+        if (Cell.Type == EPuzzleCellType::ColorFilter && Color != Cell.Color) return false;
         if (Cell.Type == EPuzzleCellType::Mirror)
         {
             EPuzzleDirection Bounced;

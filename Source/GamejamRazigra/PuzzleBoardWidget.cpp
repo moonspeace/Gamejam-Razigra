@@ -134,7 +134,9 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
 
         case EPuzzleCellType::End:
         {
-            const FLinearColor Goal = Puzzle->IsSolved() ? FLinearColor(0.2f, 1.0f, 0.4f, 1.0f) : StructureColor;
+            // The exit wears the colour it demands, so the target is readable before you solve it.
+            const FLinearColor Goal = Puzzle->IsSolved()
+                ? FLinearColor(0.2f, 1.0f, 0.4f, 1.0f) : BeamColor(C.Color);
             Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.48f, Goal, 3.0f);
             Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.30f, Goal * 0.8f, 2.0f);
             Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.12f, Goal, 3.0f);
@@ -167,6 +169,21 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const FLinearColor Dim = FLinearColor(0.45f, 0.60f, 0.70f, 1.0f);
             Shape(Elements, PieceLayer, Geometry, Box, Dim, 2.0f);
             Hatch(Elements, PieceLayer, Geometry, Box, Dim * 0.5f, 5.0f);
+            break;
+        }
+
+        case EPuzzleCellType::ColorFilter:
+        {
+            // Deliberately the blocker's outline without the hatching: an open square reads as
+            // something the beam can get through, and its colour says which beam.
+            const TArray<FVector2D> Box = {NW, NE, SE, SW};
+            const FLinearColor Filter = BeamColor(C.Color);
+            Shape(Elements, PieceLayer, Geometry, Box, Filter, 3.0f);
+            const float Inner = (SE.X - NW.X) * 0.16f;
+            const TArray<FVector2D> InnerBox = {
+                NW + FVector2D(Inner, Inner), NE + FVector2D(-Inner, Inner),
+                SE + FVector2D(-Inner, -Inner), SW + FVector2D(Inner, -Inner)};
+            Shape(Elements, PieceLayer, Geometry, InnerBox, Filter * 0.5f, 1.5f);
             break;
         }
 
@@ -207,10 +224,17 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         const FVector2D Corner[4] = {Min, FVector2D(Max.X, Min.Y), Max, FVector2D(Min.X, Max.Y)};
         const FVector2D Horz[4] = {FVector2D(1,0), FVector2D(-1,0), FVector2D(-1,0), FVector2D(1,0)};
         const FVector2D Vert[4] = {FVector2D(0,1), FVector2D(0,1), FVector2D(0,-1), FVector2D(0,-1)};
+        // Brackets take a player's colour while that player is waiting for the other to agree,
+        // so a half-entered input is visible rather than silently dropped.
+        const int32 Pending = Puzzle->GetPendingInputMask();
+        FLinearColor BracketColor = SelectionColor;
+        if (Pending == 1) BracketColor = PlayerOneColor;
+        else if (Pending == 2) BracketColor = PlayerTwoColor;
+
         for (int32 K = 0; K < 4; ++K)
         {
-            Stroke(Elements, SelectLayer, Geometry, {Corner[K], Corner[K] + Horz[K] * Arm}, SelectionColor, 3.0f, true);
-            Stroke(Elements, SelectLayer, Geometry, {Corner[K], Corner[K] + Vert[K] * Arm}, SelectionColor, 3.0f, true);
+            Stroke(Elements, SelectLayer, Geometry, {Corner[K], Corner[K] + Horz[K] * Arm}, BracketColor, 3.0f, true);
+            Stroke(Elements, SelectLayer, Geometry, {Corner[K], Corner[K] + Vert[K] * Arm}, BracketColor, 3.0f, true);
         }
     }
 
