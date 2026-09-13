@@ -432,8 +432,12 @@ void UCoopHudWidget::BuildScoreAndGameOver(UOverlay* Root)
     RestartStyle.NormalPadding = FMargin(22.0f, 13.0f);
     RestartStyle.PressedPadding = FMargin(22.0f, 15.0f, 22.0f, 11.0f);
     Restart->SetStyle(RestartStyle);
+    const ACoopPlayerController* OwningController = Cast<ACoopPlayerController>(GetOwningPlayer());
+    const bool bCanRestartRun = OwningController && OwningController->CanRestartRun();
+    Restart->SetIsEnabled(bCanRestartRun);
     UTextBlock* RestartLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RestartRunLabel"));
-    RestartLabel->SetText(FText::FromString(TEXT("RESTART RUN")));
+    RestartLabel->SetText(FText::FromString(
+        bCanRestartRun ? TEXT("RELOAD RUN") : TEXT("WAITING FOR HOST TO RELOAD")));
     RestartLabel->SetFont(Data->MenuButtonFont);
     RestartLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
     Restart->SetContent(RestartLabel);

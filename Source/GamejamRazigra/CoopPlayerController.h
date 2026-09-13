@@ -39,6 +39,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="Zombie Zero|Game")
     void RequestRestartRun();
 
+    /** Only the local controller that owns the listen server may reload a multiplayer run. */
+    UFUNCTION(BlueprintPure, Category="Zombie Zero|Game")
+    bool CanRestartRun() const;
+
     UFUNCTION(BlueprintPure, Category="Razigra")
     int32 GetPlayerSlot() const { return PlayerSlot; }
 

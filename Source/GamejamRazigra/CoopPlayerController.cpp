@@ -223,12 +223,25 @@ void ACoopPlayerController::HandleGunFired(bool bHit)
 
 void ACoopPlayerController::RequestRestartRun()
 {
+    if (!CanRestartRun())
+    {
+        return;
+    }
     ServerRequestRestartRun();
+}
+
+bool ACoopPlayerController::CanRestartRun() const
+{
+    // On a listen server only its host controller is both authoritative and local. A remote
+    // client's controller is local on that machine but not authoritative; its server-side copy
+    // is authoritative but not local. Standalone satisfies both conditions as intended.
+    return HasAuthority() && IsLocalController();
 }
 
 void ACoopPlayerController::ServerRequestRestartRun_Implementation()
 {
-    if (!GetWorld())
+    // Validate again on the server so a modified remote client cannot invoke the RPC directly.
+    if (!CanRestartRun() || !GetWorld())
     {
         return;
     }
