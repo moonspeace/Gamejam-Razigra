@@ -167,6 +167,7 @@ void ACoopGameMode::EnsureSharedHero()
                 Controller->ClientBindToSharedHero(State->SharedHero);
             }
         }
+        State->StartIntroCinematic();
     }
 }
 

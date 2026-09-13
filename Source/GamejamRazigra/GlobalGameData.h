@@ -14,6 +14,7 @@ class UCameraShakeBase;
 class UCoopHudWidget;
 class UCoopMenuWidget;
 class UFont;
+class UFileMediaSource;
 class UMaterialInterface;
 class UParticleSystem;
 class USkeletalMesh;
@@ -73,6 +74,17 @@ public:
     /** Seconds the screen takes to fade up from black once the match starts. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation", meta=(ClampMin="0"))
     float GameplayFadeInSeconds = 0.9f;
+
+    /** Imported File Media Source for the synchronized level-opening MP4. Put its video in Content/Movies. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Intro Cinematic")
+    TSoftObjectPtr<UFileMediaSource> LevelIntroCinematic;
+
+    /** Lead time gives every connected machine time to open the media before the shared start. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Intro Cinematic", meta=(ClampMin="0.25"))
+    float IntroCinematicStartDelay = 1.5f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Presentation|Intro Cinematic", meta=(ClampMin="0.0", ClampMax="1.0"))
+    float IntroCinematicVolume = 1.0f;
 
     /** Camera boom offset. Used as socket offset normally, or relative offset when attached to a bone. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Camera")

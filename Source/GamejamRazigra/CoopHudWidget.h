@@ -8,6 +8,10 @@
 class UBorder;
 class UButton;
 class UHorizontalBox;
+class UImage;
+class UMediaPlayer;
+class UMediaSoundComponent;
+class UMediaTexture;
 class UProgressBar;
 class USizeBox;
 class UTextBlock;
@@ -32,6 +36,8 @@ public:
     /** Gives every shot native feedback even when the hero Blueprint has no weapon effects. */
     void ShowFireFeedback(bool bHit);
 
+    void PlayIntroCinematic(double ServerStartTime);
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style")
     FLinearColor PlayerOneColor;
 
@@ -50,6 +56,7 @@ public:
 protected:
     virtual void NativeOnInitialized() override;
     virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
+    virtual void NativeDestruct() override;
 
 private:
     UPROPERTY()
@@ -98,6 +105,21 @@ private:
     UPROPERTY()
     TObjectPtr<UTextBlock> RestartRunLabel;
 
+    UPROPERTY()
+    TObjectPtr<UBorder> CinematicOverlay;
+
+    UPROPERTY()
+    TObjectPtr<UImage> CinematicImage;
+
+    UPROPERTY()
+    TObjectPtr<UMediaPlayer> CinematicPlayer;
+
+    UPROPERTY()
+    TObjectPtr<UMediaTexture> CinematicTexture;
+
+    UPROPERTY()
+    TObjectPtr<UMediaSoundComponent> CinematicSound;
+
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
     TArray<float> DamageVignetteWeights;
@@ -110,6 +132,8 @@ private:
     int32 DisplayedKillCount = 0;
     float KillSmashRemaining = 0.0f;
     float OverheatFlashTime = 0.0f;
+    double PendingCinematicServerTime = -1.0;
+    bool bCinematicMediaReady = false;
 
     void BuildCombatIndicators(class UOverlay* Root);
     void BuildDamageVignette(class UOverlay* Root);
@@ -120,6 +144,9 @@ private:
     UWidget* BuildLegend();
     UWidget* BuildRoleAbilityCard();
     void BuildScoreAndGameOver(class UOverlay* Root);
+    void BuildCinematicOverlay(class UOverlay* Root);
+    UFUNCTION() void HandleCinematicOpened(FString OpenedUrl);
+    UFUNCTION() void HandleCinematicEnded();
     UFUNCTION()
     void HandleRestartClicked();
     ASharedHeroCharacter* ResolveSharedHero() const;

@@ -36,6 +36,9 @@ public:
     /** Local-only crosshair response to a replicated shot. */
     void HandleGunFired(bool bHit);
 
+    /** Queues local media playback against the replicated server clock. */
+    void StartLevelCinematic(double ServerStartTime);
+
     UFUNCTION(BlueprintCallable, Category="Zombie Zero|Game")
     void RequestRestartRun();
 
@@ -102,6 +105,7 @@ private:
 
     FVector2D PendingLookInput = FVector2D::ZeroVector;
     float SharedHeroSearchTime = 0.0f;
+    double PendingCinematicStartTime = -1.0;
 
     void HoldScreenBlack();
     void FadeScreenIn();

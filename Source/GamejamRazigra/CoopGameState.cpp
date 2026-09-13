@@ -6,6 +6,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
+#include "GlobalGameData.h"
 
 void ACoopGameState::AddZombieKill()
 {
@@ -22,6 +23,34 @@ void ACoopGameState::ResetZombieKills()
     {
         ZombieKillCount = 0;
         ForceNetUpdate();
+    }
+}
+
+void ACoopGameState::StartIntroCinematic()
+{
+    if (!HasAuthority() || CinematicStartServerTime >= 0.0
+        || UGlobalGameData::Get(this)->LevelIntroCinematic.IsNull())
+    {
+        return;
+    }
+    CinematicStartServerTime = GetServerWorldTimeSeconds()
+        + UGlobalGameData::Get(this)->IntroCinematicStartDelay;
+    OnRep_CinematicStartTime();
+    ForceNetUpdate();
+}
+
+void ACoopGameState::OnRep_CinematicStartTime()
+{
+    if (CinematicStartServerTime < 0.0 || !GetWorld())
+    {
+        return;
+    }
+    for (TActorIterator<ACoopPlayerController> It(GetWorld()); It; ++It)
+    {
+        if (It->IsLocalController())
+        {
+            It->StartLevelCinematic(CinematicStartServerTime);
+        }
     }
 }
 
@@ -58,4 +87,5 @@ void ACoopGameState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     DOREPLIFETIME(ACoopGameState, ConnectedPlayerCount);
     DOREPLIFETIME(ACoopGameState, RequiredPlayerCount);
     DOREPLIFETIME(ACoopGameState, ZombieKillCount);
+    DOREPLIFETIME(ACoopGameState, CinematicStartServerTime);
 }
