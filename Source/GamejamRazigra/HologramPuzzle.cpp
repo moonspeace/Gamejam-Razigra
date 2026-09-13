@@ -3,6 +3,10 @@
 #include "Camera/CameraComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/WidgetComponent.h"
+#include "CoopGameState.h"
+#include "CoopPlayerController.h"
+#include "Engine/World.h"
+#include "EngineUtils.h"
 #include "Net/UnrealNetwork.h"
 #include "PuzzleBoardWidget.h"
 #include "SharedHeroCharacter.h"
@@ -179,8 +183,12 @@ bool AHologramPuzzle::IsInteractive(int32 CellIndex) const
 
 void AHologramPuzzle::SetFocused(bool bNewFocused)
 {
-    if (!HasAuthority() || bSolved || bFocused == bNewFocused) return;
+    // Leaving always has to work. Only entering is blocked once the puzzle is solved, otherwise
+    // a player who is already inside can never be let out again.
+    if (!HasAuthority() || bFocused == bNewFocused) return;
+    if (bNewFocused && bSolved) return;
     bFocused = bNewFocused;
+    ClearHeroInput();
     PendingInputTime[0] = 0.0;
     PendingInputTime[1] = 0.0;
     PendingInputMask = 0;
@@ -279,7 +287,13 @@ void AHologramPuzzle::ActivateSelection()
     if (Cell.Type == EPuzzleCellType::Mirror) Cell.Rotation = (Cell.Rotation + 1) & 3;
     else Cell.bActive = !Cell.bActive;
     RecomputeLaser();
-    if (TraceLaser(LaserPath)) { bSolved = true; bFocused = false; MulticastSolved(); }
+    if (TraceLaser(LaserPath))
+    {
+        bSolved = true;
+        bFocused = false;
+        ClearHeroInput();
+        MulticastSolved();
+    }
     OnRep_State();
     ForceNetUpdate();
 }
@@ -334,6 +348,48 @@ void AHologramPuzzle::OnRep_State()
 {
     BoardWidth = BoardHeight = PuzzleId == 0 ? 5 : (PuzzleId == 1 ? 7 : 9);
     RecomputeLaser();
+    ApplyFocusToLocalPlayers();
+}
+
+/**
+ * Focus follows the replicated bFocused for every local player, rather than being pushed to
+ * whichever controller happened to press the key. Both players share one hero, so both views
+ * belong on the board together, and more importantly both are released together: solving the
+ * puzzle clears bFocused, and anyone still holding a stale ActivePuzzle would have every input
+ * swallowed by a board that is no longer listening.
+ */
+void AHologramPuzzle::ApplyFocusToLocalPlayers()
+{
+    UWorld* World = GetWorld();
+    if (!World)
+    {
+        return;
+    }
+    for (FConstPlayerControllerIterator It = World->GetPlayerControllerIterator(); It; ++It)
+    {
+        ACoopPlayerController* Controller = Cast<ACoopPlayerController>(It->Get());
+        if (Controller && Controller->IsLocalController())
+        {
+            Controller->SetPuzzleFocus(bFocused ? this : nullptr);
+        }
+    }
+}
+
+/** Drops any keys the players were holding when the board took or gave back their input. */
+void AHologramPuzzle::ClearHeroInput()
+{
+    if (!HasAuthority() || !GetWorld())
+    {
+        return;
+    }
+    if (const ACoopGameState* State = GetWorld()->GetGameState<ACoopGameState>())
+    {
+        if (ASharedHeroCharacter* Hero = State->SharedHero)
+        {
+            Hero->ResetParticipant(0);
+            Hero->ResetParticipant(1);
+        }
+    }
 }
 
 void AHologramPuzzle::MulticastSolved_Implementation()

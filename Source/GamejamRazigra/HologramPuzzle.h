@@ -158,5 +158,7 @@ private:
     int32 Index(int32 X, int32 Y) const { return Y * BoardWidth + X; }
     bool IsInteractive(int32 CellIndex) const;
     void RunInput(EPuzzleInput Input);
+    void ApplyFocusToLocalPlayers();
+    void ClearHeroInput();
     void RefreshPendingMask();
 };

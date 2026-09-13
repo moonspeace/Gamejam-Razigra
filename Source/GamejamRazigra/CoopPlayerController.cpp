@@ -266,7 +266,9 @@ void ACoopPlayerController::SetAction(EConsensusAction Action, bool bPressed)
 
 void ACoopPlayerController::SetPuzzleFocus(AHologramPuzzle* Puzzle)
 {
-    if (!IsLocalController()) return;
+    // The puzzle republishes its focus on every board change, so ignore repeats: without this
+    // each cursor move would restart the camera blend and the view would never settle.
+    if (!IsLocalController() || ActivePuzzle == Puzzle) return;
     ActivePuzzle = Puzzle;
     if (GameplayHud) GameplayHud->SetVisibility(Puzzle ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
     if (Puzzle) SetViewTargetWithBlend(Puzzle, Puzzle->ViewBlendTime, EViewTargetBlendFunction::VTBlend_Cubic);
@@ -285,8 +287,8 @@ void ACoopPlayerController::ServerTogglePuzzleInteraction_Implementation()
     {
         if (It->IsFocused())
         {
+            // The puzzle tells every local player itself, through its replicated focus.
             It->SetFocused(false);
-            ClientSetPuzzleFocus(nullptr);
             return;
         }
     }
@@ -304,7 +306,6 @@ void ACoopPlayerController::ServerTogglePuzzleInteraction_Implementation()
     {
         Hero->ResetParticipant(0); Hero->ResetParticipant(1);
         Nearest->SetFocused(true);
-        ClientSetPuzzleFocus(Nearest);
     }
 }
 
@@ -330,7 +331,6 @@ void ACoopPlayerController::ServerPuzzleInput_Implementation(EPuzzleDirection Di
         if (!It->IsFocused()) continue;
         // The board waits for both players, so hand it the slot that asked.
         It->SubmitInput(PlayerSlot, Input);
-        if (It->IsSolved()) ClientSetPuzzleFocus(nullptr);
         return;
     }
 }
