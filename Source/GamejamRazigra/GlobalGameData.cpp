@@ -15,8 +15,10 @@ namespace RazigraData
     static const TCHAR* ZombieDeathMaterialPath = TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath");
     static const TCHAR* ZombieSpawnMaterialPath = TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath");
     static const TCHAR* LaserTraceMaterialPath = TEXT("/Game/Materials/M_LaserTrace.M_LaserTrace");
-    static const TCHAR* ShieldMaterialPath = TEXT("/Game/Materials/M_PlayerShield.M_PlayerShield");
+    static const TCHAR* ShieldMaterialPath = TEXT("/Game/Materials/M_PlayerShieldHexBold.M_PlayerShieldHexBold");
     static const TCHAR* HealingMaterialPath = TEXT("/Game/Materials/M_HealingPlus.M_HealingPlus");
+    static const TCHAR* MuzzleParticlePath = TEXT("/Game/ParagonMurdock/FX/Particles/Abilities/Primary/FX/P_Murdock_STD_MUZZLE.P_Murdock_STD_MUZZLE");
+    static const TCHAR* HitParticlePath = TEXT("/Game/ParagonMurdock/FX/Particles/Abilities/SpreadShot/FX/P_SpreadShotImpact.P_SpreadShotImpact");
 }
 
 UGlobalGameData::UGlobalGameData()
@@ -40,6 +42,8 @@ UGlobalGameData::UGlobalGameData()
     LaserTraceMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::LaserTraceMaterialPath));
     ShieldMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::ShieldMaterialPath));
     HealingEffectMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::HealingMaterialPath));
+    WeaponMuzzleParticle = TSoftObjectPtr<UParticleSystem>(FSoftObjectPath(RazigraData::MuzzleParticlePath));
+    ZombieHitParticle = TSoftObjectPtr<UParticleSystem>(FSoftObjectPath(RazigraData::HitParticlePath));
     ZombieAttackAnimation = TSoftObjectPtr<UAnimSequenceBase>(FSoftObjectPath(
         TEXT("/Game/ZombieMale_AAB/Animations/ZombieAttack_1__UE.ZombieAttack_1__UE")));
 }

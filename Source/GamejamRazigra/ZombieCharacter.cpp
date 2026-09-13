@@ -19,6 +19,7 @@
 #include "SharedHeroCharacter.h"
 #include "TimerManager.h"
 #include "EngineUtils.h"
+#include "Particles/ParticleSystem.h"
 
 AZombieCharacter::AZombieCharacter()
 {
@@ -72,14 +73,70 @@ void AZombieCharacter::BeginPlay()
 
     if (USkeletalMesh* MeshAsset = Data->ZombieMesh.LoadSynchronous())
     {
-        // Mesh asset only: its relative transform belongs in the constructor, see the note there.
         GetMesh()->SetSkeletalMeshAsset(MeshAsset);
     }
+    if (HasAuthority())
+    {
+        ClothingVariationIndices.SetNum(Data->ZombieClothingSlots.Num());
+        for (int32 SlotIndex = 0; SlotIndex < Data->ZombieClothingSlots.Num(); ++SlotIndex)
+        {
+            const int32 Count = Data->ZombieClothingSlots[SlotIndex].Variations.Num();
+            ClothingVariationIndices[SlotIndex] = Count > 0 ? FMath::RandHelper(Count) : INDEX_NONE;
+        }
+    }
+    ApplyClothingVariations();
     if (UClass* AnimationClass = Data->ZombieAnimationClass.LoadSynchronous())
     {
         GetMesh()->SetAnimInstanceClass(AnimationClass);
     }
     StartSpawnEffect();
+}
+
+void AZombieCharacter::ApplyClothingVariations()
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    while (ClothingComponents.Num() < Data->ZombieClothingSlots.Num())
+    {
+        const int32 SlotIndex = ClothingComponents.Num();
+        const FName ComponentName = *FString::Printf(TEXT("ZombieClothing_%d"), SlotIndex);
+        USkeletalMeshComponent* Clothing = NewObject<USkeletalMeshComponent>(this, ComponentName);
+        Clothing->SetupAttachment(GetMesh());
+        Clothing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        Clothing->SetCastShadow(true);
+        Clothing->RegisterComponent();
+        Clothing->SetLeaderPoseComponent(GetMesh(), true, true);
+        ClothingComponents.Add(Clothing);
+    }
+    for (int32 SlotIndex = 0; SlotIndex < ClothingComponents.Num(); ++SlotIndex)
+    {
+        USkeletalMesh* ClothingMesh = nullptr;
+        if (Data->ZombieClothingSlots.IsValidIndex(SlotIndex)
+            && ClothingVariationIndices.IsValidIndex(SlotIndex))
+        {
+            const TArray<TSoftObjectPtr<USkeletalMesh>>& Variations =
+                Data->ZombieClothingSlots[SlotIndex].Variations;
+            const int32 Variation = ClothingVariationIndices[SlotIndex];
+            if (Variations.IsValidIndex(Variation)) ClothingMesh = Variations[Variation].LoadSynchronous();
+        }
+        ClothingComponents[SlotIndex]->SetSkeletalMeshAsset(ClothingMesh);
+        ClothingComponents[SlotIndex]->SetLeaderPoseComponent(GetMesh(), true, true);
+    }
+}
+
+void AZombieCharacter::OnRep_ClothingVariations()
+{
+    ApplyClothingVariations();
+}
+
+TArray<USkeletalMeshComponent*> AZombieCharacter::GetVisualMeshes() const
+{
+    TArray<USkeletalMeshComponent*> Result;
+    if (GetMesh()) Result.Add(GetMesh());
+    for (USkeletalMeshComponent* Clothing : ClothingComponents)
+    {
+        if (IsValid(Clothing) && Clothing->GetSkeletalMeshAsset()) Result.Add(Clothing);
+    }
+    return Result;
 }
 
 void AZombieCharacter::Tick(float DeltaSeconds)
@@ -414,19 +471,26 @@ void AZombieCharacter::StartSpawnEffect()
     bSpawnEffectActive = true;
     SpawnMaterials.Reset();
     PreSpawnMaterials.Reset();
-    const int32 SlotCount = FMath::Max(1, GetMesh()->GetNumMaterials());
-    for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+    PreSpawnMaterialComponents.Reset();
+    PreSpawnMaterialSlots.Reset();
+    for (USkeletalMeshComponent* VisualMesh : GetVisualMeshes())
     {
-        PreSpawnMaterials.Add(GetMesh()->GetMaterial(Slot));
-        UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(SpawnMaterial, this);
-        Dynamic->SetVectorParameterValue(TEXT("DeathColor"),
-            Data->ZombieSpawnEffectColor * Data->ZombieSpawnEffectIntensity);
-        Dynamic->SetVectorParameterValue(TEXT("SpawnColor"), Data->ZombieSpawnEffectColor);
-        Dynamic->SetScalarParameterValue(TEXT("DissolveAmount"), 1.0f);
-        Dynamic->SetScalarParameterValue(TEXT("BlinkAmount"), 1.0f);
-        Dynamic->SetScalarParameterValue(TEXT("EdgeWidth"), Data->ZombieSpawnEdgeWidth);
-        GetMesh()->SetMaterial(Slot, Dynamic);
-        SpawnMaterials.Add(Dynamic);
+        const int32 SlotCount = FMath::Max(1, VisualMesh->GetNumMaterials());
+        for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+        {
+            PreSpawnMaterials.Add(VisualMesh->GetMaterial(Slot));
+            PreSpawnMaterialComponents.Add(VisualMesh);
+            PreSpawnMaterialSlots.Add(Slot);
+            UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(SpawnMaterial, this);
+            Dynamic->SetVectorParameterValue(TEXT("DeathColor"),
+                Data->ZombieSpawnEffectColor * Data->ZombieSpawnEffectIntensity);
+            Dynamic->SetVectorParameterValue(TEXT("SpawnColor"), Data->ZombieSpawnEffectColor);
+            Dynamic->SetScalarParameterValue(TEXT("DissolveAmount"), 1.0f);
+            Dynamic->SetScalarParameterValue(TEXT("BlinkAmount"), 1.0f);
+            Dynamic->SetScalarParameterValue(TEXT("EdgeWidth"), Data->ZombieSpawnEdgeWidth);
+            VisualMesh->SetMaterial(Slot, Dynamic);
+            SpawnMaterials.Add(Dynamic);
+        }
     }
     UE_LOG(LogRazigra, Verbose, TEXT("Zombie %s assembling with spawn material %s."),
         *GetName(), *SpawnMaterial->GetPathName());
@@ -452,15 +516,20 @@ void AZombieCharacter::UpdateSpawnEffect(float DeltaSeconds)
 
 void AZombieCharacter::FinishSpawnEffect()
 {
-    if (GetMesh())
+    for (int32 Index = 0; Index < PreSpawnMaterials.Num(); ++Index)
     {
-        for (int32 Slot = 0; Slot < PreSpawnMaterials.Num(); ++Slot)
+        if (PreSpawnMaterialComponents.IsValidIndex(Index)
+            && PreSpawnMaterialSlots.IsValidIndex(Index)
+            && IsValid(PreSpawnMaterialComponents[Index]))
         {
-            GetMesh()->SetMaterial(Slot, PreSpawnMaterials[Slot]);
+            PreSpawnMaterialComponents[Index]->SetMaterial(
+                PreSpawnMaterialSlots[Index], PreSpawnMaterials[Index]);
         }
     }
     SpawnMaterials.Reset();
     PreSpawnMaterials.Reset();
+    PreSpawnMaterialComponents.Reset();
+    PreSpawnMaterialSlots.Reset();
     bSpawnEffectActive = false;
 }
 
@@ -567,15 +636,18 @@ void AZombieCharacter::StartDeathEffect()
     UE_LOG(LogRazigra, Log, TEXT("Zombie %s starting death effect with material %s."),
         *GetName(), *DeathMaterial->GetPathName());
 
-    const int32 SlotCount = FMath::Max(1, GetMesh()->GetNumMaterials());
-    for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+    for (USkeletalMeshComponent* VisualMesh : GetVisualMeshes())
     {
-        UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(DeathMaterial, this);
-        DynamicMaterial->SetVectorParameterValue(TEXT("DeathColor"), FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
-        DynamicMaterial->SetScalarParameterValue(TEXT("BlinkAmount"), 0.0f);
-        DynamicMaterial->SetScalarParameterValue(TEXT("DissolveAmount"), 0.0f);
-        GetMesh()->SetMaterial(Slot, DynamicMaterial);
-        DeathMaterials.Add(DynamicMaterial);
+        const int32 SlotCount = FMath::Max(1, VisualMesh->GetNumMaterials());
+        for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+        {
+            UMaterialInstanceDynamic* DynamicMaterial = UMaterialInstanceDynamic::Create(DeathMaterial, this);
+            DynamicMaterial->SetVectorParameterValue(TEXT("DeathColor"), FLinearColor(1.0f, 0.0f, 0.0f, 1.0f));
+            DynamicMaterial->SetScalarParameterValue(TEXT("BlinkAmount"), 0.0f);
+            DynamicMaterial->SetScalarParameterValue(TEXT("DissolveAmount"), 0.0f);
+            VisualMesh->SetMaterial(Slot, DynamicMaterial);
+            DeathMaterials.Add(DynamicMaterial);
+        }
     }
 }
 
@@ -625,4 +697,5 @@ void AZombieCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(AZombieCharacter, Health);
     DOREPLIFETIME(AZombieCharacter, bIsAttacking);
     DOREPLIFETIME(AZombieCharacter, bIsDead);
+    DOREPLIFETIME(AZombieCharacter, ClothingVariationIndices);
 }

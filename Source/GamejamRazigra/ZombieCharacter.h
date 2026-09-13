@@ -7,6 +7,7 @@
 class ASharedHeroCharacter;
 class UMaterialInstanceDynamic;
 class UMaterialInterface;
+class USkeletalMeshComponent;
 
 /** Simple server-controlled zombie: path to the shared hero, then attack. */
 UCLASS(Blueprintable)
@@ -49,6 +50,9 @@ public:
     void BP_OnZombieAttackResolved(bool bHitHero);
 
 protected:
+    UFUNCTION()
+    void OnRep_ClothingVariations();
+
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastAttack();
 
@@ -71,6 +75,12 @@ private:
     UPROPERTY(Replicated)
     bool bIsDead = false;
 
+    UPROPERTY(ReplicatedUsing=OnRep_ClothingVariations)
+    TArray<int32> ClothingVariationIndices;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<USkeletalMeshComponent>> ClothingComponents;
+
     UPROPERTY()
     TObjectPtr<ASharedHeroCharacter> TargetHero;
 
@@ -79,6 +89,11 @@ private:
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UMaterialInterface>> PreSpawnMaterials;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<USkeletalMeshComponent>> PreSpawnMaterialComponents;
+
+    TArray<int32> PreSpawnMaterialSlots;
 
     UPROPERTY(Transient)
     TArray<TObjectPtr<UMaterialInstanceDynamic>> DeathMaterials;
@@ -100,6 +115,8 @@ private:
     FTimerHandle HitFlashTimer;
 
     void AcquireTarget();
+    void ApplyClothingVariations();
+    TArray<USkeletalMeshComponent*> GetVisualMeshes() const;
     void FaceTarget();
     void UpdateServerBehavior();
     void StartAttack();

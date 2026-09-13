@@ -265,6 +265,9 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> ShieldDynamicMaterial;
 
+    /** Local presentation state; gameplay protection continues to use replicated bShieldActive. */
+    float ShieldVisualAlpha = 0.0f;
+
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> HealingDynamicMaterial;
 
@@ -280,6 +283,7 @@ private:
     void ProcessActions();
     void FireGun();
     void UpdateRecoilHeat(float DeltaSeconds);
+    void UpdateShieldVisual(float DeltaSeconds);
     void TriggerWeaponOverheat();
     void ConfigureAbilityVisuals();
 };
