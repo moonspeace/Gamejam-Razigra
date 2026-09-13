@@ -22,6 +22,9 @@ public:
     virtual void PreLogin(const FString& Options, const FString& Address,
         const FUniqueNetIdRepl& UniqueId, FString& ErrorMessage) override;
 
+    /** Server-side reset that preserves the level and connected session. */
+    void RestartRunInPlace();
+
 protected:
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra", meta=(DisplayName="On Shared Hero Spawned"))
     void BP_OnSharedHeroSpawned(ASharedHeroCharacter* Hero);

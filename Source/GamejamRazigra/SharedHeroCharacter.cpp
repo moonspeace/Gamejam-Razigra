@@ -528,6 +528,47 @@ void ASharedHeroCharacter::ResetParticipant(int32 ParticipantIndex)
     RefreshActionMasks();
 }
 
+void ASharedHeroCharacter::ResetForNewRun(const FTransform& SpawnTransform)
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+
+    for (int32 ParticipantIndex = 0; ParticipantIndex < ParticipantCount; ++ParticipantIndex)
+    {
+        ResetParticipant(ParticipantIndex);
+        PendingLook[ParticipantIndex] = FVector2D::ZeroVector;
+        LookReceivedAt[ParticipantIndex] = 0.0;
+    }
+    bIsDead = false;
+    Health = UGlobalGameData::Get(this)->HeroMaxHealth;
+    bIsFiring = false;
+    bHealingActive = false;
+    bShieldActive = false;
+    bCrouchImmunityVisualActive = false;
+    bWeaponOverheated = false;
+    RecoilHeat = 0.0f;
+    OverheatUntil = 0.0;
+    CrouchDamageImmunityUntil = 0.0;
+    NextFireTime = 0.0;
+    FiringVisualUntil = 0.0;
+    bWasJumpConsensus = false;
+    bWasCrouchConsensus = false;
+    ShieldVisualAlpha = 0.0f;
+    UnCrouch();
+    StopJumping();
+
+    AimRotation = SpawnTransform.Rotator();
+    TeleportTo(SpawnTransform.GetLocation(), SpawnTransform.Rotator(), false, true);
+    GetCharacterMovement()->StopMovementImmediately();
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    OnRep_AimRotation();
+    OnRep_AbilityState();
+    MulticastHeroReset();
+    ForceNetUpdate();
+}
+
 void ASharedHeroCharacter::ProcessMovement()
 {
     const float ForwardValue = (HasConsensus(EConsensusAction::MoveForward) ? 1.0f : 0.0f)
@@ -830,6 +871,11 @@ void ASharedHeroCharacter::MulticastHeroDamaged_Implementation(float DamageAmoun
 void ASharedHeroCharacter::MulticastHeroDied_Implementation()
 {
     BP_OnHeroDied();
+}
+
+void ASharedHeroCharacter::MulticastHeroReset_Implementation()
+{
+    BP_OnHeroReset();
 }
 
 bool ASharedHeroCharacter::IsCharacterJumping() const

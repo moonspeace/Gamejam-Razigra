@@ -43,6 +43,7 @@ public:
     void SetParticipantAction(int32 ParticipantIndex, EConsensusAction Action, bool bPressed);
     void SubmitParticipantLook(int32 ParticipantIndex, const FVector2D& LookDelta);
     void ResetParticipant(int32 ParticipantIndex);
+    void ResetForNewRun(const FTransform& SpawnTransform);
     void SetRequiredConsensusParticipants(int32 NewRequiredCount);
     void SetParticipantAbility(int32 ParticipantIndex, bool bPressed);
 
@@ -164,6 +165,9 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Died"))
     void BP_OnHeroDied();
 
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Reset"))
+    void BP_OnHeroReset();
+
     UFUNCTION(BlueprintImplementableEvent, Category="Razigra|State", meta=(DisplayName="On Hero Damaged"))
     void BP_OnHeroDamaged(float DamageAmount);
 
@@ -198,6 +202,9 @@ protected:
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastHeroDied();
+
+    UFUNCTION(NetMulticast, Reliable)
+    void MulticastHeroReset();
 
     UFUNCTION(NetMulticast, Reliable)
     void MulticastWeaponOverheated();

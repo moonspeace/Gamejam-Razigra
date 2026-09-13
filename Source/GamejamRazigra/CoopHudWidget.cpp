@@ -601,7 +601,7 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     if (KillCount != DisplayedKillCount)
     {
         DisplayedKillCount = KillCount;
-        KillSmashRemaining = 0.55f;
+        KillSmashRemaining = KillCount > 0 ? 0.55f : 0.0f;
         static const TCHAR* ImpactWords[] = {
             TEXT("SMASH!"), TEXT("BONK!"), TEXT("WHAM!"), TEXT("KAPOW!"), TEXT("BAM!"),
             TEXT("CRUNCH!"), TEXT("SPLAT!"), TEXT("THWACK!"), TEXT("ZAP!"), TEXT("BOOM!")
@@ -611,6 +611,10 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             // Cycle deterministically so every word appears and network clients show the same one.
             SmashText->SetText(FText::FromString(
                 ImpactWords[(KillCount - 1) % UE_ARRAY_COUNT(ImpactWords)]));
+        }
+        else if (SmashText)
+        {
+            SmashText->SetText(FText::GetEmpty());
         }
         if (KillText)
         {
@@ -641,6 +645,16 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
             FInputModeUIOnly InputMode;
             InputMode.SetWidgetToFocus(GameOverOverlay->TakeWidget());
             Controller->SetInputMode(InputMode);
+        }
+    }
+    else if (Hero && !Hero->IsDead() && bGameOverShown)
+    {
+        bGameOverShown = false;
+        GameOverOverlay->SetVisibility(ESlateVisibility::Collapsed);
+        if (APlayerController* Controller = GetOwningPlayer())
+        {
+            Controller->bShowMouseCursor = false;
+            Controller->SetInputMode(FInputModeGameOnly());
         }
     }
 

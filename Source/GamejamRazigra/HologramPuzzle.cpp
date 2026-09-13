@@ -111,6 +111,7 @@ void AHologramPuzzle::BuildPuzzle()
 {
     PuzzleId = FMath::Clamp(PuzzleId, 0, 2);
     BoardWidth = BoardHeight = PuzzleId == 0 ? 5 : (PuzzleId == 1 ? 7 : 9);
+    Cells.Reset();
     Cells.SetNum(BoardWidth * BoardHeight);
     auto Put = [this](int32 X, int32 Y, EPuzzleCellType Type, uint8 Rotation = 0,
         EPuzzleLaserColor Color = EPuzzleLaserColor::Red)
@@ -341,6 +342,24 @@ void AHologramPuzzle::ActivateSelection()
     ForceNetUpdate();
 }
 
+void AHologramPuzzle::ResetForNewRun()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+    bFocused = false;
+    bSolved = false;
+    PendingInputTime[0] = 0.0;
+    PendingInputTime[1] = 0.0;
+    PendingInputMask = 0;
+    ClearHeroInput();
+    BuildPuzzle();
+    OnRep_State();
+    MulticastReset();
+    ForceNetUpdate();
+}
+
 void AHologramPuzzle::RecomputeLaser() { TraceLaser(LaserPath); RefreshWidget(); }
 
 bool AHologramPuzzle::TraceLaser(TArray<FPuzzleLaserSegment>& OutPath) const
@@ -438,6 +457,12 @@ void AHologramPuzzle::ClearHeroInput()
 void AHologramPuzzle::MulticastSolved_Implementation()
 {
     BP_OnPuzzleSolved();
+    RefreshWidget();
+}
+
+void AHologramPuzzle::MulticastReset_Implementation()
+{
+    BP_OnPuzzleReset();
     RefreshWidget();
 }
 

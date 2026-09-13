@@ -2,6 +2,7 @@
 
 #include "Camera/PlayerCameraManager.h"
 #include "CoopGameState.h"
+#include "CoopGameMode.h"
 #include "CoopHudWidget.h"
 #include "EOSSessionSubsystem.h"
 #include "Engine/GameInstance.h"
@@ -256,13 +257,14 @@ void ACoopPlayerController::ServerRequestRestartRun_Implementation()
         return;
     }
 
-    UE_LOG(LogRazigra, Log, TEXT("Host requested synchronized run reload for all players."));
-    // ?Restart tells the authoritative world to reload its current URL. This is the same
-    // low-level path used by AGameMode::RestartGame, but it also works with AGameModeBase and
-    // keeps every connected client attached to the server travel.
-    if (!GetWorld()->ServerTravel(TEXT("?Restart"), false))
+    UE_LOG(LogRazigra, Log, TEXT("Host requested synchronized in-place run reset."));
+    if (ACoopGameMode* GameMode = GetWorld()->GetAuthGameMode<ACoopGameMode>())
     {
-        UE_LOG(LogRazigra, Error, TEXT("Synchronized run reload could not start."));
+        GameMode->RestartRunInPlace();
+    }
+    else
+    {
+        UE_LOG(LogRazigra, Error, TEXT("In-place run reset failed: CoopGameMode is not active."));
     }
 }
 

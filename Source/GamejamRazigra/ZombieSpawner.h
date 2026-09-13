@@ -39,6 +39,10 @@ public:
     UFUNCTION(BlueprintCallable, Category="Razigra|Spawner", BlueprintAuthorityOnly)
     void SpawnZombieNow();
 
+    /** Restores this instance's initial active state and full per-run spawn budget. */
+    UFUNCTION(BlueprintCallable, Category="Razigra|Spawner", BlueprintAuthorityOnly)
+    void ResetForNewRun();
+
     UPROPERTY(EditAnywhere, BlueprintReadOnly, ReplicatedUsing=OnRep_Active, Category="Spawner")
     bool bSpawnerActive = true;
 
@@ -77,6 +81,7 @@ private:
 #endif
 
     FTimerHandle SpawnTimer;
+    bool bInitialSpawnerActive = true;
 
     UPROPERTY()
     TArray<TObjectPtr<AZombieCharacter>> SpawnedZombies;

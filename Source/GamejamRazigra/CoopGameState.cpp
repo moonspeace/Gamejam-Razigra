@@ -16,6 +16,15 @@ void ACoopGameState::AddZombieKill()
     }
 }
 
+void ACoopGameState::ResetZombieKills()
+{
+    if (HasAuthority())
+    {
+        ZombieKillCount = 0;
+        ForceNetUpdate();
+    }
+}
+
 void ACoopGameState::OnRep_SharedHero()
 {
     if (!SharedHero)

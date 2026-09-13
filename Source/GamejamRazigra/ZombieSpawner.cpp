@@ -54,8 +54,23 @@ void AZombieSpawner::BeginPlay()
     Super::BeginPlay();
     if (HasAuthority())
     {
+        bInitialSpawnerActive = bSpawnerActive;
         RefreshTimer();
     }
+}
+
+void AZombieSpawner::ResetForNewRun()
+{
+    if (!HasAuthority())
+    {
+        return;
+    }
+    SpawnedZombies.Reset();
+    TotalSpawned = 0;
+    bSpawnerActive = bInitialSpawnerActive;
+    RefreshTimer();
+    OnRep_Active();
+    ForceNetUpdate();
 }
 
 void AZombieSpawner::SetSpawnerActive(bool bNewActive)

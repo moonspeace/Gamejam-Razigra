@@ -7,8 +7,11 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "GlobalGameData.h"
+#include "HologramPuzzle.h"
 #include "GamejamRazigra.h"
 #include "SharedHeroCharacter.h"
+#include "ZombieCharacter.h"
+#include "ZombieSpawner.h"
 
 ACoopGameMode::ACoopGameMode()
 {
@@ -16,6 +19,63 @@ ACoopGameMode::ACoopGameMode()
     PlayerControllerClass = ACoopPlayerController::StaticClass();
     GameStateClass = ACoopGameState::StaticClass();
     bUseSeamlessTravel = true;
+}
+
+void ACoopGameMode::RestartRunInPlace()
+{
+    if (!HasAuthority() || !GetWorld())
+    {
+        return;
+    }
+
+    // Release puzzle focus before moving the hero and rebuild every board from its authored ID.
+    for (TActorIterator<AHologramPuzzle> It(GetWorld()); It; ++It)
+    {
+        It->ResetForNewRun();
+    }
+
+    TArray<AZombieCharacter*> Zombies;
+    for (TActorIterator<AZombieCharacter> It(GetWorld()); It; ++It)
+    {
+        Zombies.Add(*It);
+    }
+    for (AZombieCharacter* Zombie : Zombies)
+    {
+        if (IsValid(Zombie))
+        {
+            Zombie->Destroy();
+        }
+    }
+    for (TActorIterator<AZombieSpawner> It(GetWorld()); It; ++It)
+    {
+        It->ResetForNewRun();
+    }
+
+    ACoopGameState* State = GetGameState<ACoopGameState>();
+    if (!State || !State->SharedHero)
+    {
+        return;
+    }
+    State->ResetZombieKills();
+
+    FTransform SpawnTransform = State->SharedHero->GetActorTransform();
+    for (TActorIterator<APlayerStart> It(GetWorld()); It; ++It)
+    {
+        SpawnTransform = It->GetActorTransform();
+        break;
+    }
+    State->SharedHero->ResetForNewRun(SpawnTransform);
+
+    // Explicitly release both local views as well; this avoids waiting for puzzle replication
+    // before restoring input on a player who died while focused on a board.
+    for (const TPair<TWeakObjectPtr<ACoopPlayerController>, int32>& Pair : AssignedSlots)
+    {
+        if (ACoopPlayerController* Controller = Pair.Key.Get())
+        {
+            Controller->ClientSetPuzzleFocus(nullptr);
+        }
+    }
+    UE_LOG(LogRazigra, Log, TEXT("In-place run reset completed for all connected players."));
 }
 
 void ACoopGameMode::StartPlay()

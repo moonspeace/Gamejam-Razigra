@@ -27,6 +27,7 @@ public:
     int32 ZombieKillCount = 0;
 
     void AddZombieKill();
+    void ResetZombieKills();
 
     UFUNCTION()
     void OnRep_SharedHero();

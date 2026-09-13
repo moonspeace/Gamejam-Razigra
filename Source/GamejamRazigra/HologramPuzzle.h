@@ -109,6 +109,9 @@ public:
     UFUNCTION(BlueprintImplementableEvent, Category="Puzzle")
     void BP_OnPuzzleSolved();
 
+    UFUNCTION(BlueprintImplementableEvent, Category="Puzzle", meta=(DisplayName="On Puzzle Reset"))
+    void BP_OnPuzzleReset();
+
     UFUNCTION(BlueprintPure, Category="Puzzle") bool IsFocused() const { return bFocused; }
     UFUNCTION(BlueprintPure, Category="Puzzle") bool IsSolved() const { return bSolved; }
     bool IsWithinInteractionRange(const ASharedHeroCharacter* Hero) const;
@@ -124,6 +127,9 @@ public:
     void MoveSelection(EPuzzleDirection Direction);
     void ActivateSelection();
 
+    UFUNCTION(BlueprintCallable, Category="Puzzle", BlueprintAuthorityOnly)
+    void ResetForNewRun();
+
     int32 GetBoardWidth() const { return BoardWidth; }
     int32 GetBoardHeight() const { return BoardHeight; }
     int32 GetSelectedCell() const { return SelectedCell; }
@@ -133,6 +139,7 @@ public:
 protected:
     UFUNCTION() void OnRep_State();
     UFUNCTION(NetMulticast, Reliable) void MulticastSolved();
+    UFUNCTION(NetMulticast, Reliable) void MulticastReset();
 
 private:
     UPROPERTY(VisibleAnywhere) TObjectPtr<USceneComponent> Root;
