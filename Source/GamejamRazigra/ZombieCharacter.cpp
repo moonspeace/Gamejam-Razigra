@@ -27,7 +27,15 @@ AZombieCharacter::AZombieCharacter()
     SetCanBeDamaged(true);
     AIControllerClass = AAIController::StaticClass();
     AutoPossessAI = EAutoPossessAI::PlacedInWorldOrSpawned;
+    // APawn defaults bUseControllerRotationYaw to true, which on the server hands the zombie's
+    // yaw to its AIController. Clients have no controller, so they fall back to the replicated
+    // rotation and end up facing somewhere else entirely. Turning it off leaves exactly one
+    // system in charge of facing on both sides.
+    bUseControllerRotationPitch = false;
+    bUseControllerRotationYaw = false;
+    bUseControllerRotationRoll = false;
     GetCharacterMovement()->bOrientRotationToMovement = true;
+    GetCharacterMovement()->bUseControllerDesiredRotation = false;
     GetCharacterMovement()->RotationRate = FRotator(0.0f, 420.0f, 0.0f);
     // Camera weapon traces use Visibility. Pawn collision ignores it by default.
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
@@ -73,6 +81,23 @@ void AZombieCharacter::AcquireTarget()
     }
 }
 
+/**
+ * Turns to the hero on the yaw axis only. The old version fed the full 3D delta to SetActorRotation,
+ * which pitched and rolled the capsule whenever the hero was above or below, and fought
+ * bOrientRotationToMovement for the same rotation in the same frame. Disabling orient-to-movement
+ * first means the server settles on one answer, which is then the one that replicates.
+ */
+void AZombieCharacter::FaceTarget()
+{
+    if (!IsValid(TargetHero))
+    {
+        return;
+    }
+    GetCharacterMovement()->bOrientRotationToMovement = false;
+    const FVector ToTarget = TargetHero->GetActorLocation() - GetActorLocation();
+    SetActorRotation(FRotator(0.0f, ToTarget.Rotation().Yaw, 0.0f));
+}
+
 void AZombieCharacter::UpdateServerBehavior()
 {
     if (!IsValid(TargetHero) || TargetHero->IsDead())
@@ -99,10 +124,7 @@ void AZombieCharacter::UpdateServerBehavior()
         {
             AI->StopMovement();
         }
-        if (IsValid(TargetHero))
-        {
-            SetActorRotation((TargetHero->GetActorLocation() - GetActorLocation()).Rotation());
-        }
+        FaceTarget();
         if (Now >= AttackHitTime)
         {
             ResolveAttack();
@@ -116,7 +138,7 @@ void AZombieCharacter::UpdateServerBehavior()
         {
             AI->StopMovement();
         }
-        SetActorRotation((TargetHero->GetActorLocation() - GetActorLocation()).Rotation());
+        FaceTarget();
         if (Now >= NextAttackTime)
         {
             StartAttack();
@@ -124,6 +146,8 @@ void AZombieCharacter::UpdateServerBehavior()
     }
     else if (AI && Now >= NextPathRefreshTime)
     {
+        // Chasing again: character movement takes facing back over.
+        GetCharacterMovement()->bOrientRotationToMovement = true;
         NextPathRefreshTime = Now + Data->ZombiePathRefreshInterval;
         AI->MoveToActor(TargetHero, MeleeReach * 0.8f, true, true, true, nullptr, true);
     }

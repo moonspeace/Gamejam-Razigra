@@ -83,6 +83,7 @@ private:
     FTimerHandle RestoreAnimationTimer;
 
     void AcquireTarget();
+    void FaceTarget();
     void UpdateServerBehavior();
     void StartAttack();
     void ResolveAttack();

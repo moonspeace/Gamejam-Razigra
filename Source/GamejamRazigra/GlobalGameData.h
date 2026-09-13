@@ -142,6 +142,21 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon", meta=(ClampMin="0.01"))
     float FireInterval = 0.2f;
 
+    /**
+     * Heat added by a single shot, as a fraction of the bar. At 0.125 the eighth shot in quick
+     * succession overheats the weapon.
+     */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.001", ClampMax="1.0"))
+    float RecoilHeatPerShot = 0.125f;
+
+    /** Fraction of the bar that bleeds off per second while the trigger is not held. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.01"))
+    float RecoilCooldownPerSecond = 0.4f;
+
+    /** How long the weapon is locked out once the bar fills. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Recoil", meta=(ClampMin="0.1"))
+    float RecoilOverheatSeconds = 3.0f;
+
     /** Bone or socket where the cosmetic tracer and muzzle flash begin. The hit trace remains camera-based. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon")
     FName VisualTraceOriginBoneName = TEXT("hand_r");

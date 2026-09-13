@@ -197,10 +197,46 @@ void ASharedHeroCharacter::Tick(float DeltaSeconds)
         Health = FMath::Min(Data->HeroMaxHealth, Health + Data->HealingPerSecond * DeltaSeconds);
     }
 
+    UpdateRecoilHeat(DeltaSeconds);
+
     if (bIsFiring && GetWorld()->GetTimeSeconds() >= FiringVisualUntil)
     {
         bIsFiring = false;
     }
+}
+
+/**
+ * The bar fills a notch per shot and bleeds back down whenever the trigger is not held, so
+ * holding it never recovers. Filling it locks the weapon out; during the lockout the bar drains
+ * across the whole duration, which doubles as the countdown the players watch.
+ */
+void ASharedHeroCharacter::UpdateRecoilHeat(float DeltaSeconds)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    const double Now = GetWorld()->GetTimeSeconds();
+
+    if (bWeaponOverheated)
+    {
+        const float Remaining = static_cast<float>(FMath::Max(0.0, OverheatUntil - Now));
+        RecoilHeat = Data->RecoilOverheatSeconds > 0.0f
+            ? FMath::Clamp(Remaining / Data->RecoilOverheatSeconds, 0.0f, 1.0f) : 0.0f;
+        if (Now >= OverheatUntil)
+        {
+            bWeaponOverheated = false;
+            RecoilHeat = 0.0f;
+        }
+        return;
+    }
+
+    if (!HasConsensus(EConsensusAction::Fire) && RecoilHeat > 0.0f)
+    {
+        RecoilHeat = FMath::Max(0.0f, RecoilHeat - Data->RecoilCooldownPerSecond * DeltaSeconds);
+    }
+}
+
+void ASharedHeroCharacter::MulticastWeaponOverheated_Implementation()
+{
+    BP_OnWeaponOverheated();
 }
 
 void ASharedHeroCharacter::SetParticipantAbility(int32 ParticipantIndex, bool bPressed)
@@ -209,12 +245,24 @@ void ASharedHeroCharacter::SetParticipantAbility(int32 ParticipantIndex, bool bP
     {
         return;
     }
-    if (ParticipantIndex == 0) bHealingActive = bPressed;
-    if (ParticipantIndex == 1) bShieldActive = bPressed;
     if (bPressed)
     {
+        // One ability between the two of them: whoever gets there first keeps it until they let
+        // go, so the pair never has healing and the shield up at the same time.
+        const bool bOtherAbilityHeld = (ParticipantIndex == 0) ? bShieldActive : bHealingActive;
+        if (bOtherAbilityHeld)
+        {
+            return;
+        }
+        if (ParticipantIndex == 0) bHealingActive = true;
+        if (ParticipantIndex == 1) bShieldActive = true;
         ParticipantActions[ParticipantIndex][static_cast<int32>(EConsensusAction::Fire)] = false;
         RefreshActionMasks();
+    }
+    else
+    {
+        if (ParticipantIndex == 0) bHealingActive = false;
+        if (ParticipantIndex == 1) bShieldActive = false;
     }
     OnRep_AbilityState();
     ForceNetUpdate();
@@ -405,6 +453,18 @@ void ASharedHeroCharacter::ProcessMovement()
     const float RightValue = (HasConsensus(EConsensusAction::MoveRight) ? 1.0f : 0.0f)
         - (HasConsensus(EConsensusAction::MoveLeft) ? 1.0f : 0.0f);
 
+    if (IsAbilityRooting())
+    {
+        // Healing and the shield plant the hero. Only horizontal motion is cancelled, so a
+        // player who triggers one mid-air still falls instead of freezing in the sky.
+        if (GetCharacterMovement()->IsMovingOnGround())
+        {
+            GetCharacterMovement()->Velocity.X = 0.0f;
+            GetCharacterMovement()->Velocity.Y = 0.0f;
+        }
+        return;
+    }
+
     const FRotator YawOnly(0.0f, AimRotation.Yaw, 0.0f);
     AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::X), ForwardValue);
     AddMovementInput(FRotationMatrix(YawOnly).GetUnitAxis(EAxis::Y), RightValue);
@@ -480,7 +540,7 @@ void ASharedHeroCharacter::ProcessActions()
         UnCrouch();
     }
 
-    const bool bJumpConsensus = HasConsensus(EConsensusAction::Jump);
+    const bool bJumpConsensus = HasConsensus(EConsensusAction::Jump) && !IsAbilityRooting();
     if (bJumpConsensus && !bWasJumpConsensus)
     {
         Jump();
@@ -491,7 +551,7 @@ void ASharedHeroCharacter::ProcessActions()
     }
     bWasJumpConsensus = bJumpConsensus;
 
-    if (!bHealingActive && !bShieldActive && HasConsensus(EConsensusAction::Fire)
+    if (!bWeaponOverheated && !bHealingActive && !bShieldActive && HasConsensus(EConsensusAction::Fire)
         && GetWorld()->GetTimeSeconds() >= NextFireTime)
     {
         FireGun();
@@ -503,6 +563,14 @@ void ASharedHeroCharacter::FireGun()
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     const double Now = GetWorld()->GetTimeSeconds();
     NextFireTime = Now + Data->FireInterval;
+
+    RecoilHeat = FMath::Clamp(RecoilHeat + Data->RecoilHeatPerShot, 0.0f, 1.0f);
+    if (RecoilHeat >= 1.0f && !bWeaponOverheated)
+    {
+        bWeaponOverheated = true;
+        OverheatUntil = Now + Data->RecoilOverheatSeconds;
+        MulticastWeaponOverheated();
+    }
     FiringVisualUntil = Now + FMath::Min(Data->FireInterval, 0.12f);
     bIsFiring = true;
 
@@ -703,6 +771,8 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, bIsDead);
     DOREPLIFETIME(ASharedHeroCharacter, bHealingActive);
     DOREPLIFETIME(ASharedHeroCharacter, bShieldActive);
+    DOREPLIFETIME(ASharedHeroCharacter, RecoilHeat);
+    DOREPLIFETIME(ASharedHeroCharacter, bWeaponOverheated);
     DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerOneActionMask);
     DOREPLIFETIME(ASharedHeroCharacter, PlayerTwoActionMask);

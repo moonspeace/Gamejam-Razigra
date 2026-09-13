@@ -52,6 +52,10 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
     bool IsShieldActive() const { return bShieldActive; }
 
+    /** Either ability planted: the hero holds still for as long as it is held. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
+    bool IsAbilityRooting() const { return bHealingActive || bShieldActive; }
+
     UFUNCTION(BlueprintPure, Category="Razigra|Animation")
     bool IsCharacterCrouching() const { return bIsCrouched; }
 
@@ -108,6 +112,17 @@ public:
      * consensus aim instead. Aim offsets and weapon aiming read this; movement never does.
      */
     virtual FRotator GetBaseAimRotation() const override;
+
+    /** Recoil bar, 0 to 1. Replicated so both players' HUDs can show the same meter. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Weapon")
+    float GetRecoilHeat() const { return RecoilHeat; }
+
+    /** True while the weapon is locked out after the bar filled. */
+    UFUNCTION(BlueprintPure, Category="Razigra|Weapon")
+    bool IsWeaponOverheated() const { return bWeaponOverheated; }
+
+    UFUNCTION(BlueprintImplementableEvent, Category="Razigra|Weapon", meta=(DisplayName="On Weapon Overheated"))
+    void BP_OnWeaponOverheated();
 
     UFUNCTION(BlueprintPure, Category="Razigra|State")
     bool IsDead() const { return bIsDead; }
@@ -182,6 +197,9 @@ protected:
     void MulticastHeroDied();
 
     UFUNCTION(NetMulticast, Reliable)
+    void MulticastWeaponOverheated();
+
+    UFUNCTION(NetMulticast, Reliable)
     void MulticastHeroDamaged(float DamageAmount);
 
 private:
@@ -213,6 +231,14 @@ private:
 
     UPROPERTY(Replicated)
     FVector2D PlayerTwoLookAxis = FVector2D::ZeroVector;
+
+    UPROPERTY(Replicated)
+    float RecoilHeat = 0.0f;
+
+    UPROPERTY(Replicated)
+    bool bWeaponOverheated = false;
+
+    double OverheatUntil = 0.0;
 
     UPROPERTY(ReplicatedUsing=OnRep_AimRotation)
     FRotator AimRotation;
@@ -246,5 +272,6 @@ private:
     void ProcessLook();
     void ProcessActions();
     void FireGun();
+    void UpdateRecoilHeat(float DeltaSeconds);
     void ConfigureAbilityVisuals();
 };
