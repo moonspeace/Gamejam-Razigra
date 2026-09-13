@@ -8,6 +8,7 @@
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GlobalGameData.h"
+#include "GamejamRazigra.h"
 #include "HologramPuzzle.h"
 #include "Net/UnrealNetwork.h"
 #include "RazigraGameInstance.h"
@@ -232,22 +233,37 @@ void ACoopPlayerController::RequestRestartRun()
 
 bool ACoopPlayerController::CanRestartRun() const
 {
-    // On a listen server only its host controller is both authoritative and local. A remote
-    // client's controller is local on that machine but not authoritative; its server-side copy
-    // is authoritative but not local. Standalone satisfies both conditions as intended.
-    return HasAuthority() && IsLocalController();
+    if (!IsLocalController() || !GetWorld())
+    {
+        return false;
+    }
+    // Slot zero is allocated to the listen host. Unlike HasAuthority(), this remains reliable
+    // for local PIE clients and becomes available as soon as PlayerSlot finishes replicating.
+    return GetWorld()->GetNetMode() == NM_Standalone || PlayerSlot == 0;
 }
 
 void ACoopPlayerController::ServerRequestRestartRun_Implementation()
 {
-    // Validate again on the server so a modified remote client cannot invoke the RPC directly.
-    if (!CanRestartRun() || !GetWorld())
+    if (!GetWorld())
     {
         return;
     }
-    const FString Map = UGlobalGameData::Get(this)->GameplayMap.ToSoftObjectPath().GetLongPackageName();
-    const bool bStandalone = GetWorld()->GetNetMode() == NM_Standalone;
-    GetWorld()->ServerTravel(Map + (bStandalone ? TEXT("") : TEXT("?listen")));
+    // Validate by the replicated/authoritative slot here; IsLocalController is intentionally not
+    // used because an RPC's server-side controller copy need not be local in every PIE topology.
+    if (GetWorld()->GetNetMode() != NM_Standalone && PlayerSlot != 0)
+    {
+        UE_LOG(LogRazigra, Warning, TEXT("Rejected reload request from non-host player slot %d."), PlayerSlot);
+        return;
+    }
+
+    UE_LOG(LogRazigra, Log, TEXT("Host requested synchronized run reload for all players."));
+    // ?Restart tells the authoritative world to reload its current URL. This is the same
+    // low-level path used by AGameMode::RestartGame, but it also works with AGameModeBase and
+    // keeps every connected client attached to the server travel.
+    if (!GetWorld()->ServerTravel(TEXT("?Restart"), false))
+    {
+        UE_LOG(LogRazigra, Error, TEXT("Synchronized run reload could not start."));
+    }
 }
 
 void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCharacter* Hero)

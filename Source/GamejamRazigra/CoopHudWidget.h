@@ -92,6 +92,12 @@ private:
     UPROPERTY()
     TObjectPtr<UBorder> GameOverOverlay;
 
+    UPROPERTY()
+    TObjectPtr<UButton> RestartRunButton;
+
+    UPROPERTY()
+    TObjectPtr<UTextBlock> RestartRunLabel;
+
     TArray<EConsensusAction> CardActions;
     TArray<FLinearColor> CardColors;
     TArray<float> DamageVignetteWeights;

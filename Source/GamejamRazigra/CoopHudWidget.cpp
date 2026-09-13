@@ -419,8 +419,8 @@ void UCoopHudWidget::BuildScoreAndGameOver(UOverlay* Root)
     Title->SetColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.02f, 0.01f, 1.0f)));
     Title->SetJustification(ETextJustify::Center);
     Panel->AddChildToVerticalBox(Title)->SetPadding(FMargin(60.0f, 45.0f, 60.0f, 28.0f));
-    UButton* Restart = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RestartRunButton"));
-    FButtonStyle RestartStyle = Restart->GetStyle();
+    RestartRunButton = WidgetTree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("RestartRunButton"));
+    FButtonStyle RestartStyle = RestartRunButton->GetStyle();
     FSlateBrush RestartNormal;
     RestartNormal.DrawAs = ESlateBrushDrawType::Box;
     RestartNormal.TintColor = FSlateColor(FLinearColor(0.10f, 0.01f, 0.01f, 1.0f));
@@ -431,18 +431,18 @@ void UCoopHudWidget::BuildScoreAndGameOver(UOverlay* Root)
     RestartStyle.SetPressed(RestartHover);
     RestartStyle.NormalPadding = FMargin(22.0f, 13.0f);
     RestartStyle.PressedPadding = FMargin(22.0f, 15.0f, 22.0f, 11.0f);
-    Restart->SetStyle(RestartStyle);
+    RestartRunButton->SetStyle(RestartStyle);
     const ACoopPlayerController* OwningController = Cast<ACoopPlayerController>(GetOwningPlayer());
     const bool bCanRestartRun = OwningController && OwningController->CanRestartRun();
-    Restart->SetIsEnabled(bCanRestartRun);
-    UTextBlock* RestartLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RestartRunLabel"));
-    RestartLabel->SetText(FText::FromString(
+    RestartRunButton->SetIsEnabled(bCanRestartRun);
+    RestartRunLabel = WidgetTree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("RestartRunLabel"));
+    RestartRunLabel->SetText(FText::FromString(
         bCanRestartRun ? TEXT("RELOAD RUN") : TEXT("WAITING FOR HOST TO RELOAD")));
-    RestartLabel->SetFont(Data->MenuButtonFont);
-    RestartLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
-    Restart->SetContent(RestartLabel);
-    Restart->OnClicked.AddDynamic(this, &ThisClass::HandleRestartClicked);
-    Panel->AddChildToVerticalBox(Restart)->SetPadding(FMargin(60.0f, 0.0f, 60.0f, 45.0f));
+    RestartRunLabel->SetFont(Data->MenuButtonFont);
+    RestartRunLabel->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+    RestartRunButton->SetContent(RestartRunLabel);
+    RestartRunButton->OnClicked.AddDynamic(this, &ThisClass::HandleRestartClicked);
+    Panel->AddChildToVerticalBox(RestartRunButton)->SetPadding(FMargin(60.0f, 0.0f, 60.0f, 45.0f));
     if (UOverlaySlot* GameOverSlot = Root->AddChildToOverlay(GameOverOverlay))
     {
         GameOverSlot->SetHorizontalAlignment(HAlign_Fill);
@@ -576,6 +576,21 @@ int32 UCoopHudWidget::ResolveLocalParticipantIndex() const
 void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
 {
     Super::NativeTick(MyGeometry, InDeltaTime);
+
+    // The HUD may be created before PlayerSlot arrives. Keep this synchronized so the host's
+    // button becomes actionable as soon as slot replication completes instead of staying in its
+    // initial disabled state for the lifetime of the widget.
+    if (RestartRunButton && RestartRunLabel)
+    {
+        const ACoopPlayerController* Controller = Cast<ACoopPlayerController>(GetOwningPlayer());
+        const bool bCanRestartRun = Controller && Controller->CanRestartRun();
+        if (RestartRunButton->GetIsEnabled() != bCanRestartRun)
+        {
+            RestartRunButton->SetIsEnabled(bCanRestartRun);
+            RestartRunLabel->SetText(FText::FromString(
+                bCanRestartRun ? TEXT("RELOAD RUN") : TEXT("WAITING FOR HOST TO RELOAD")));
+        }
+    }
 
     const ASharedHeroCharacter* Hero = ResolveSharedHero();
     const int32 RequiredParticipants = Hero ? FMath::Max(1, Hero->GetRequiredConsensusParticipants()) : 2;
