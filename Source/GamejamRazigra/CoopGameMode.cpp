@@ -2,6 +2,7 @@
 
 #include "CoopGameState.h"
 #include "CoopPlayerController.h"
+#include "Components/SceneComponent.h"
 #include "EOSSessionSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "EngineUtils.h"
@@ -50,6 +51,7 @@ void ACoopGameMode::RestartRunInPlace()
     {
         It->ResetForNewRun();
     }
+    ResetGates();
 
     ACoopGameState* State = GetGameState<ACoopGameState>();
     if (!State || !State->SharedHero)
@@ -81,6 +83,7 @@ void ACoopGameMode::RestartRunInPlace()
 void ACoopGameMode::StartPlay()
 {
     Super::StartPlay();
+    CaptureInitialGateState();
 
     // Local OpenLevel travel can enter StartPlay before PostLogin is called for the carried
     // local controller. Register every controller already in the world so solo mode cannot
@@ -168,6 +171,55 @@ void ACoopGameMode::EnsureSharedHero()
             }
         }
         State->StartIntroCinematic();
+        for (const TPair<TWeakObjectPtr<ACoopPlayerController>, int32>& Pair : AssignedSlots)
+        {
+            if (ACoopPlayerController* Controller = Pair.Key.Get())
+            {
+                Controller->ClientStartIntroCinematic(State->CinematicStartServerTime);
+            }
+        }
+    }
+}
+
+void ACoopGameMode::CaptureInitialGateState()
+{
+    InitialGateTransforms.Reset();
+    InitialGateComponentTransforms.Reset();
+    UClass* GateClass = LoadClass<AActor>(nullptr, TEXT("/Game/BP_Gate.BP_Gate_C"));
+    if (!GateClass || !GetWorld())
+    {
+        return;
+    }
+    for (TActorIterator<AActor> It(GetWorld(), GateClass); It; ++It)
+    {
+        AActor* Gate = *It;
+        InitialGateTransforms.Add(Gate, Gate->GetActorTransform());
+        TArray<USceneComponent*> Components;
+        Gate->GetComponents(Components);
+        for (USceneComponent* Component : Components)
+        {
+            InitialGateComponentTransforms.Add(Component, Component->GetRelativeTransform());
+        }
+    }
+}
+
+void ACoopGameMode::ResetGates()
+{
+    for (const TPair<TWeakObjectPtr<AActor>, FTransform>& Pair : InitialGateTransforms)
+    {
+        if (AActor* Gate = Pair.Key.Get())
+        {
+            Gate->Reset();
+            Gate->SetActorTransform(Pair.Value, false, nullptr, ETeleportType::TeleportPhysics);
+            Gate->ForceNetUpdate();
+        }
+    }
+    for (const TPair<TWeakObjectPtr<USceneComponent>, FTransform>& Pair : InitialGateComponentTransforms)
+    {
+        if (USceneComponent* Component = Pair.Key.Get())
+        {
+            Component->SetRelativeTransform(Pair.Value, false, nullptr, ETeleportType::TeleportPhysics);
+        }
     }
 }
 

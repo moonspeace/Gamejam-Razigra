@@ -6,6 +6,7 @@
 
 class ACoopPlayerController;
 class ASharedHeroCharacter;
+class USceneComponent;
 
 UCLASS(Blueprintable)
 class GAMEJAMRAZIGRA_API ACoopGameMode : public AGameModeBase
@@ -31,6 +32,8 @@ protected:
 
 private:
     TMap<TWeakObjectPtr<ACoopPlayerController>, int32> AssignedSlots;
+    TMap<TWeakObjectPtr<AActor>, FTransform> InitialGateTransforms;
+    TMap<TWeakObjectPtr<USceneComponent>, FTransform> InitialGateComponentTransforms;
 
     bool CanStartGameplay() const;
     int32 GetRequiredPlayers() const;
@@ -38,4 +41,6 @@ private:
     void EnsureSharedHero();
     int32 AllocateSlot() const;
     void RefreshConnectedCount();
+    void CaptureInitialGateState();
+    void ResetGates();
 };

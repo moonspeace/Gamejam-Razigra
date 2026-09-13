@@ -82,6 +82,9 @@ protected:
     UFUNCTION(Client, Reliable)
     void ClientBindToSharedHero(ASharedHeroCharacter* Hero);
 
+    UFUNCTION(Client, Reliable)
+    void ClientStartIntroCinematic(double ServerStartTime);
+
     UFUNCTION()
     void OnRep_PlayerSlot();
 
@@ -106,6 +109,7 @@ private:
     FVector2D PendingLookInput = FVector2D::ZeroVector;
     float SharedHeroSearchTime = 0.0f;
     double PendingCinematicStartTime = -1.0;
+    double LastCinematicStartTime = -1.0;
 
     void HoldScreenBlack();
     void FadeScreenIn();

@@ -193,11 +193,21 @@ void ACoopPlayerController::StartLevelCinematic(double ServerStartTime)
     {
         return;
     }
+    if (FMath::IsNearlyEqual(LastCinematicStartTime, ServerStartTime, 0.001))
+    {
+        return;
+    }
+    LastCinematicStartTime = ServerStartTime;
     PendingCinematicStartTime = ServerStartTime;
     if (GameplayHud)
     {
         GameplayHud->PlayIntroCinematic(ServerStartTime);
     }
+}
+
+void ACoopPlayerController::ClientStartIntroCinematic_Implementation(double ServerStartTime)
+{
+    StartLevelCinematic(ServerStartTime);
 }
 
 void ACoopPlayerController::HideGameplayHud()
