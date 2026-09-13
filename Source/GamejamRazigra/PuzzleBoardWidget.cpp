@@ -16,6 +16,20 @@ namespace
     }
 }
 
+void UPuzzleBoardWidget::SetPuzzle(AHologramPuzzle* InPuzzle)
+{
+    Puzzle = InPuzzle;
+    LaserAnimationStartTime = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0;
+    Invalidate(EInvalidateWidgetReason::Paint);
+}
+
+void UPuzzleBoardWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    // The laser is painted progressively and its emitter/receiver pulse continuously.
+    Invalidate(EInvalidateWidgetReason::Paint);
+}
+
 void UPuzzleBoardWidget::Stroke(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry,
     const TArray<FVector2D>& Points, const FLinearColor& Color, float Thickness, bool bGlow) const
 {
@@ -67,7 +81,8 @@ void UPuzzleBoardWidget::Hatch(FSlateWindowElementList& Elements, int32 Layer, c
         }
         if (Right > Left)
         {
-            Stroke(Elements, Layer, Geometry, {FVector2D(Left, Y), FVector2D(Right, Y)}, Color, 1.0f, false);
+            Stroke(Elements, Layer, Geometry, {FVector2D(Left, Y), FVector2D(Right, Y)},
+                Color, FMath::Max(1.0f, Spacing * 0.82f), false);
         }
     }
 }
@@ -125,10 +140,16 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         {
         case EPuzzleCellType::Start:
         {
-            // Points east, the way the beam leaves.
+            // Solid emitter triangle points east, the way the beam leaves.
             const TArray<FVector2D> Tri = {FVector2D(SE.X, Centre.Y), NW, SW};
-            Shape(Elements, PieceLayer, Geometry, Tri, BeamColor(EPuzzleLaserColor::Red), 3.0f);
-            Hatch(Elements, PieceLayer, Geometry, Tri, BeamColor(EPuzzleLaserColor::Red) * 0.6f, 4.0f);
+            const FLinearColor Emitter = BeamColor(EPuzzleLaserColor::Red);
+            Hatch(Elements, PieceLayer, Geometry, Tri, Emitter * 0.82f, 2.5f);
+            Shape(Elements, PieceLayer, Geometry, Tri, Emitter, 4.0f);
+            const float Pulse = 0.5f + 0.5f * FMath::Sin(
+                static_cast<float>(GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0) * 8.0f);
+            Ring(Elements, PieceLayer, Geometry, Centre, Cell * (0.10f + Pulse * 0.035f), Emitter, 3.0f);
+            Stroke(Elements, PieceLayer, Geometry,
+                {Centre, FVector2D(SE.X, Centre.Y)}, FLinearColor::White, 2.0f, true);
             break;
         }
 
@@ -138,8 +159,13 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const FLinearColor Goal = Puzzle->IsSolved()
                 ? FLinearColor(0.2f, 1.0f, 0.4f, 1.0f) : BeamColor(C.Color);
             Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.48f, Goal, 3.0f);
-            Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.30f, Goal * 0.8f, 2.0f);
-            Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.12f, Goal, 3.0f);
+            Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.30f, Goal * 0.8f, 4.0f);
+            Ring(Elements, PieceLayer, Geometry, Centre, (SE.X - NW.X) * 0.12f, Goal, 5.0f);
+            // Inward chevrons read as a receiver rather than another colour switch.
+            const float R = (SE.X - NW.X) * 0.40f;
+            Stroke(Elements, PieceLayer, Geometry,
+                {Centre + FVector2D(-R, -R * .35f), Centre + FVector2D(-R * .55f, 0),
+                 Centre + FVector2D(-R, R * .35f)}, Goal, 3.5f, true);
             break;
         }
 
@@ -156,8 +182,8 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             case 2:  Tri = {SW, NE, NW}; HypA = SW; HypB = NE; break;
             default: Tri = {NW, SE, NE}; HypA = NW; HypB = SE; break;
             }
-            Shape(Elements, PieceLayer, Geometry, Tri, StructureColor, 2.0f);
-            Hatch(Elements, PieceLayer, Geometry, Tri, StructureColor * 0.35f, 5.0f);
+            Hatch(Elements, PieceLayer, Geometry, Tri, StructureColor * 0.78f, 2.6f);
+            Shape(Elements, PieceLayer, Geometry, Tri, StructureColor, 3.0f);
             // The mirrored face, picked out so it is obvious which way it bounces.
             Stroke(Elements, PieceLayer, Geometry, {HypA, HypB}, FLinearColor::White, 4.0f, true);
             break;
@@ -192,7 +218,7 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
             const FLinearColor Gate = BeamColor(C.Color);
             const float R = (SE.X - NW.X) * 0.42f;
             Ring(Elements, PieceLayer, Geometry, Centre, R, C.bActive ? Gate : Gate * 0.45f,
-                C.bActive ? 4.0f : 2.0f);
+                C.bActive ? 6.5f : 6.0f);
             if (C.bActive)
             {
                 Ring(Elements, PieceLayer, Geometry, Centre, R * 0.5f, Gate, 3.0f);
@@ -204,13 +230,26 @@ int32 UPuzzleBoardWidget::NativePaint(const FPaintArgs& Args, const FGeometry& G
         }
     }
 
-    for (const FPuzzleLaserSegment& Segment : Puzzle->GetLaserPath())
+    const TArray<FPuzzleLaserSegment>& Path = Puzzle->GetLaserPath();
+    const double Now = GetWorld() ? GetWorld()->GetTimeSeconds() : LaserAnimationStartTime;
+    const float CellsTravelled = static_cast<float>((Now - LaserAnimationStartTime) / 0.085);
+    for (int32 SegmentIndex = 0; SegmentIndex < Path.Num(); ++SegmentIndex)
     {
+        const FPuzzleLaserSegment& Segment = Path[SegmentIndex];
+        const float SegmentAlpha = FMath::Clamp(CellsTravelled - SegmentIndex, 0.0f, 1.0f);
+        if (SegmentAlpha <= 0.0f) break;
         const FVector2D A = Origin + FVector2D((Segment.From.X + .5f) * Cell, (Segment.From.Y + .5f) * Cell);
-        const FVector2D B = Origin + FVector2D((Segment.To.X + .5f) * Cell, (Segment.To.Y + .5f) * Cell);
+        const FVector2D FullB = Origin + FVector2D((Segment.To.X + .5f) * Cell, (Segment.To.Y + .5f) * Cell);
+        const FVector2D B = FMath::Lerp(A, FullB, FMath::InterpEaseOut(0.0f, 1.0f, SegmentAlpha, 2.0f));
         const FLinearColor Colour = BeamColor(Segment.Color);
         Stroke(Elements, BeamLayer, Geometry, {A, B}, Colour, 5.0f, true);
         Stroke(Elements, BeamLayer, Geometry, {A, B}, FLinearColor(1.0f, 1.0f, 1.0f, 0.85f), 1.5f, false);
+
+        // Bright travelling front sells the beam as an emitted shot rather than a static line.
+        if (SegmentAlpha < 1.0f)
+        {
+            Ring(Elements, BeamLayer + 1, Geometry, B, Cell * 0.055f, Colour, 3.0f);
+        }
     }
 
     const int32 Selected = Puzzle->GetSelectedCell();

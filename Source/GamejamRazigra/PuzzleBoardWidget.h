@@ -12,7 +12,7 @@ class GAMEJAMRAZIGRA_API UPuzzleBoardWidget : public UUserWidget
 {
     GENERATED_BODY()
 public:
-    void SetPuzzle(AHologramPuzzle* InPuzzle) { Puzzle = InPuzzle; InvalidateLayoutAndVolatility(); }
+    void SetPuzzle(AHologramPuzzle* InPuzzle);
 
     /** Extra glow passes drawn under every stroke. The actor drives this from BloomIntensity. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Puzzle|Style", meta=(ClampMin="0"))
@@ -32,11 +32,13 @@ public:
     FLinearColor PlayerTwoColor = FLinearColor(0.09f, 0.45f, 0.95f, 1.0f);
 
 protected:
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
         const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
         int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 private:
     UPROPERTY() TObjectPtr<AHologramPuzzle> Puzzle;
+    double LaserAnimationStartTime = 0.0;
 
     void Stroke(FSlateWindowElementList& Elements, int32 Layer, const FGeometry& Geometry,
         const TArray<FVector2D>& Points, const FLinearColor& Color, float Thickness, bool bGlow) const;

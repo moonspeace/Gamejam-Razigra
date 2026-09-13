@@ -114,11 +114,19 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
     float ShieldEmissiveIntensity = 2.0f;
 
+    /** Shared recoil heat consumed per second while the shield is held. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Abilities", meta=(ClampMin="0"))
+    float ShieldHeatPerSecond = 0.28f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float WalkSpeed = 500.0f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float CrouchedSpeed = 250.0f;
+
+    /** Damage-dodge window that begins when the hero first enters crouch. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero|Combat", meta=(ClampMin="0"))
+    float CrouchDamageImmunitySeconds = 2.0f;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Hero", meta=(ClampMin="0"))
     float JumpVelocity = 600.0f;
@@ -194,6 +202,10 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0"))
     float ZombieAttackDamage = 10.0f;
 
+    /** Radius of the melee line-of-sight sweep; world geometry and gates block damage. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Combat", meta=(ClampMin="1"))
+    float ZombieAttackTraceRadius = 24.0f;
+
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombieAttackInterval = 1.0f;
 
@@ -203,6 +215,55 @@ public:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie", meta=(ClampMin="0.01"))
     float ZombiePathRefreshInterval = 0.35f;
+
+    /** Radius of the tactical ring zombies spread around instead of targeting one point. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="50"))
+    float ZombieEngagementRadius = 165.0f;
+
+    /** Nearby-zombie distance used to push crowded agents apart. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="50"))
+    float ZombieSeparationRadius = 125.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="0", ClampMax="3"))
+    float ZombieSeparationStrength = 1.15f;
+
+    /** How far ahead of a moving hero the tactical ring is positioned. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="0", ClampMax="2"))
+    float ZombieTargetPredictionSeconds = 0.32f;
+
+    /** Repath immediately after the hero moves this far, even before the normal refresh. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="5"))
+    float ZombieReactiveRepathDistance = 45.0f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|AI", meta=(ClampMin="0.25"))
+    float ZombieStuckRecoverySeconds = 1.0f;
+
+    /** Dissolve-capable material used while a zombie assembles into the world. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Spawn Effect")
+    TSoftObjectPtr<UMaterialInterface> ZombieSpawnMaterial;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Spawn Effect", meta=(ClampMin="0.05"))
+    float ZombieSpawnEffectDuration = 0.85f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Spawn Effect")
+    FLinearColor ZombieSpawnEffectColor = FLinearColor(0.0f, 0.75f, 1.0f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Spawn Effect", meta=(ClampMin="0"))
+    float ZombieSpawnEffectIntensity = 5.0f;
+
+    /** Controls how much of the assembly edge glows when supported by the assigned material. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Spawn Effect", meta=(ClampMin="0.001", ClampMax="0.5"))
+    float ZombieSpawnEdgeWidth = 0.08f;
+
+    /** Brief red shader flash for a hit that does not kill the zombie. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect", meta=(ClampMin="0.01"))
+    float ZombieHitFlashDuration = 0.11f;
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect")
+    FLinearColor ZombieHitFlashColor = FLinearColor(1.0f, 0.015f, 0.0f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Hit Effect", meta=(ClampMin="0"))
+    float ZombieHitFlashIntensity = 3.0f;
 
     /** Masked unlit material used for the red blink and dissolve death effect. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Zombie|Death Effect")

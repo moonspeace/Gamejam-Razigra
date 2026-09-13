@@ -583,6 +583,16 @@ void UCoopHudWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     {
         DisplayedKillCount = KillCount;
         KillSmashRemaining = 0.55f;
+        static const TCHAR* ImpactWords[] = {
+            TEXT("SMASH!"), TEXT("BONK!"), TEXT("WHAM!"), TEXT("KAPOW!"), TEXT("BAM!"),
+            TEXT("CRUNCH!"), TEXT("SPLAT!"), TEXT("THWACK!"), TEXT("ZAP!"), TEXT("BOOM!")
+        };
+        if (SmashText && KillCount > 0)
+        {
+            // Cycle deterministically so every word appears and network clients show the same one.
+            SmashText->SetText(FText::FromString(
+                ImpactWords[(KillCount - 1) % UE_ARRAY_COUNT(ImpactWords)]));
+        }
         if (KillText)
         {
             KillText->SetText(FText::FromString(FString::Printf(TEXT("KILLS  %03d"), KillCount)));

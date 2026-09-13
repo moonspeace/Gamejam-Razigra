@@ -88,8 +88,12 @@ public:
      * Pushes the projection's emissive above 1 so the scene's bloom picks it up. The widget's
      * own render target is 8-bit, so this tint multiply is what actually gets it into HDR.
      */
-    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Hologram", meta=(ClampMin="1.0", ClampMax="12.0"))
-    float BloomIntensity = 1.75f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Hologram", meta=(ClampMin="0.0", ClampMax="6.0", DisplayName="Projection Bloom"))
+    float BloomIntensity = 0.35f;
+
+    /** Soft painted halo beneath puzzle strokes, independent of post-process bloom. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Hologram", meta=(ClampMin="0.0", ClampMax="3.0"))
+    float PaintedGlowStrength = 0.32f;
 
     /**
      * How long one player's press waits for the other to match it. Both have to ask for the

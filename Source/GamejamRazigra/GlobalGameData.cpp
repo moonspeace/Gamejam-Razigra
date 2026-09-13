@@ -13,6 +13,7 @@ namespace RazigraData
     static const TCHAR* AssetPath = TEXT("/Game/Data/GlobalGameData.GlobalGameData");
     static const TCHAR* DefaultHeroBlueprintPath = TEXT("/Game/Blueprints/BP_SharedHero.BP_SharedHero_C");
     static const TCHAR* ZombieDeathMaterialPath = TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath");
+    static const TCHAR* ZombieSpawnMaterialPath = TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath");
     static const TCHAR* LaserTraceMaterialPath = TEXT("/Game/Materials/M_LaserTrace.M_LaserTrace");
     static const TCHAR* ShieldMaterialPath = TEXT("/Game/Materials/M_PlayerShield.M_PlayerShield");
     static const TCHAR* HealingMaterialPath = TEXT("/Game/Materials/M_HealingPlus.M_HealingPlus");
@@ -35,6 +36,7 @@ UGlobalGameData::UGlobalGameData()
     DamageNumberFont = TSoftObjectPtr<UFont>(FSoftObjectPath(TEXT("/Engine/EngineFonts/Roboto.Roboto")));
     HeroDamageCameraShakeClass = UHeroDamageCameraShake::StaticClass();
     ZombieDeathMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::ZombieDeathMaterialPath));
+    ZombieSpawnMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::ZombieSpawnMaterialPath));
     LaserTraceMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::LaserTraceMaterialPath));
     ShieldMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::ShieldMaterialPath));
     HealingEffectMaterial = TSoftObjectPtr<UMaterialInterface>(FSoftObjectPath(RazigraData::HealingMaterialPath));

@@ -6,6 +6,7 @@
 
 class ASharedHeroCharacter;
 class UMaterialInstanceDynamic;
+class UMaterialInterface;
 
 /** Simple server-controlled zombie: path to the shared hero, then attack. */
 UCLASS(Blueprintable)
@@ -55,7 +56,7 @@ protected:
     void MulticastDied();
 
     UFUNCTION(NetMulticast, Reliable)
-    void MulticastDamageReceived(float DamageAmount);
+    void MulticastDamageReceived(float DamageAmount, bool bLethalHit);
 
     UFUNCTION(NetMulticast, Unreliable)
     void MulticastAttackResolved(bool bHitHero);
@@ -74,13 +75,29 @@ private:
     TObjectPtr<ASharedHeroCharacter> TargetHero;
 
     UPROPERTY(Transient)
+    TArray<TObjectPtr<UMaterialInstanceDynamic>> SpawnMaterials;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UMaterialInterface>> PreSpawnMaterials;
+
+    UPROPERTY(Transient)
     TArray<TObjectPtr<UMaterialInstanceDynamic>> DeathMaterials;
+
+    UPROPERTY(Transient)
+    TArray<TObjectPtr<UMaterialInterface>> PreHitMaterials;
 
     double NextPathRefreshTime = 0.0;
     double NextAttackTime = 0.0;
     double AttackHitTime = 0.0;
     float DeathEffectElapsed = 0.0f;
+    float SpawnEffectElapsed = 0.0f;
+    bool bSpawnEffectActive = false;
+    float TacticalAngleRadians = 0.0f;
+    double LastProgressCheckTime = 0.0;
+    FVector LastProgressLocation = FVector::ZeroVector;
+    FVector LastTrackedHeroLocation = FVector::ZeroVector;
     FTimerHandle RestoreAnimationTimer;
+    FTimerHandle HitFlashTimer;
 
     void AcquireTarget();
     void FaceTarget();
@@ -89,5 +106,11 @@ private:
     void ResolveAttack();
     void StartDeathEffect();
     void UpdateDeathEffect(float DeltaSeconds);
+    void StartSpawnEffect();
+    void UpdateSpawnEffect(float DeltaSeconds);
+    void FinishSpawnEffect();
     void RestoreAnimationBlueprint();
+    void StartHitEffect();
+    void RestoreHitEffect();
+    FVector CalculateTacticalGoal(bool bRecovering) const;
 };

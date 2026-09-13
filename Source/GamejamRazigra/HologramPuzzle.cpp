@@ -91,7 +91,8 @@ void AHologramPuzzle::ApplyProjectionTint()
     if (!Projection) return;
     // The render target is 8-bit, so colours are clamped there; the tint multiply happens
     // afterwards in the material, which is what actually lifts the board into HDR for bloom.
-    const float Gain = FMath::Max(1.0f, BloomIntensity);
+    // Zero means neutral colour with no extra HDR gain; bloom is added above that baseline.
+    const float Gain = 1.0f + FMath::Max(0.0f, BloomIntensity);
     Projection->SetTintColorAndOpacity(FLinearColor(
         HologramTint.R * Gain, HologramTint.G * Gain, HologramTint.B * Gain, HologramTint.A));
 }
@@ -136,32 +137,60 @@ void AHologramPuzzle::BuildPuzzle()
     }
     else if (PuzzleId == 1)
     {
-        Put(6, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Blue);
-        Put(3, 6, EPuzzleCellType::Mirror, 2);
-        Put(3, 2, EPuzzleCellType::Mirror, 0);
-        Put(6, 2, EPuzzleCellType::Mirror, 1);
+        // Medium: five required reflections and all three colours. The extra pieces are genuine
+        // interactive decoys, so following the shortest-looking route is not enough.
+        Put(6, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Red);
+        Put(2, 6, EPuzzleCellType::Mirror, 1); // solution rotations: 0,2,0,2,0
+        Put(2, 4, EPuzzleCellType::Mirror, 3);
+        Put(5, 4, EPuzzleCellType::Mirror, 1);
+        Put(5, 1, EPuzzleCellType::Mirror, 3);
+        Put(6, 1, EPuzzleCellType::Mirror, 1);
         Put(1, 6, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
         Put(3, 4, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
-        Put(3, 5, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
-        Put(5, 6, EPuzzleCellType::Blocker);
-        Put(1, 2, EPuzzleCellType::Blocker);
+        Put(5, 3, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Red);
+        Put(2, 5, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
+        Put(4, 4, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Blue);
+        Put(5, 2, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Red);
+
+        Put(4, 6, EPuzzleCellType::Mirror, 2);
+        Put(1, 2, EPuzzleCellType::Mirror, 0);
+        Put(4, 2, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
+        Put(4, 5, EPuzzleCellType::Blocker);
+        Put(3, 1, EPuzzleCellType::Blocker);
+        Put(6, 5, EPuzzleCellType::Blocker);
     }
     else
     {
-        Put(8, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Red);
-        Put(2, 8, EPuzzleCellType::Mirror, 3);
-        Put(2, 5, EPuzzleCellType::Mirror, 0);
-        Put(5, 5, EPuzzleCellType::Mirror, 1);
-        Put(5, 7, EPuzzleCellType::Mirror, 2);
-        Put(8, 7, EPuzzleCellType::Mirror, 3);
+        // Hard: a long seven-bounce route snakes through five colour changes. Dense decoys make
+        // the board require planning rather than rotating whichever triangle the beam reaches.
+        Put(8, 0, EPuzzleCellType::End, 0, EPuzzleLaserColor::Blue);
+        Put(2, 8, EPuzzleCellType::Mirror, 1); // solution: 0,2,0,3,1,2,0
+        Put(2, 6, EPuzzleCellType::Mirror, 3);
+        Put(6, 6, EPuzzleCellType::Mirror, 1);
+        Put(6, 3, EPuzzleCellType::Mirror, 0);
+        Put(4, 3, EPuzzleCellType::Mirror, 2);
+        Put(4, 1, EPuzzleCellType::Mirror, 3);
+        Put(8, 1, EPuzzleCellType::Mirror, 1);
         Put(1, 8, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
-        Put(3, 5, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
-        Put(6, 7, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Red);
-        Put(2, 6, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
-        Put(4, 5, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Blue);
-        Put(4, 8, EPuzzleCellType::Blocker);
+        Put(4, 6, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
+        Put(6, 5, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Red);
+        Put(5, 3, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Green);
+        Put(7, 1, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
+        Put(2, 7, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
+        Put(5, 6, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Blue);
+        Put(6, 4, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Red);
+        Put(4, 2, EPuzzleCellType::ColorFilter, 0, EPuzzleLaserColor::Green);
+
+        Put(4, 8, EPuzzleCellType::Mirror, 2);
+        Put(1, 4, EPuzzleCellType::Mirror, 0);
+        Put(8, 5, EPuzzleCellType::Mirror, 3);
+        Put(3, 7, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Red);
+        Put(7, 4, EPuzzleCellType::ColorSwitch, 0, EPuzzleLaserColor::Blue);
+        Put(5, 8, EPuzzleCellType::Blocker);
         Put(2, 2, EPuzzleCellType::Blocker);
-        Put(7, 5, EPuzzleCellType::Blocker);
+        Put(7, 6, EPuzzleCellType::Blocker);
+        Put(1, 1, EPuzzleCellType::Blocker);
+        Put(8, 3, EPuzzleCellType::Blocker);
     }
 
     SelectedCell = INDEX_NONE;
@@ -354,7 +383,7 @@ bool AHologramPuzzle::TraceLaser(TArray<FPuzzleLaserSegment>& OutPath) const
 void AHologramPuzzle::RefreshWidget()
 {
     if (!BoardWidget) return;
-    BoardWidget->GlowStrength = FMath::Max(0.0f, BloomIntensity * 0.5f);
+    BoardWidget->GlowStrength = FMath::Max(0.0f, PaintedGlowStrength);
     BoardWidget->SetPuzzle(this);
 }
 

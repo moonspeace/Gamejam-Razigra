@@ -52,12 +52,15 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
     bool IsShieldActive() const { return bShieldActive; }
 
-    /** Either ability planted: the hero holds still for as long as it is held. */
+    /** Healing plants the hero; shielding deliberately allows normal movement. */
     UFUNCTION(BlueprintPure, Category="Razigra|Abilities")
-    bool IsAbilityRooting() const { return bHealingActive || bShieldActive; }
+    bool IsAbilityRooting() const { return bHealingActive; }
 
     UFUNCTION(BlueprintPure, Category="Razigra|Animation")
     bool IsCharacterCrouching() const { return bIsCrouched; }
+
+    UFUNCTION(BlueprintPure, Category="Razigra|Combat")
+    bool IsCrouchDamageImmunityActive() const;
 
     UFUNCTION(BlueprintPure, Category="Razigra|Animation")
     bool IsCharacterJumping() const;
@@ -239,6 +242,7 @@ private:
     bool bWeaponOverheated = false;
 
     double OverheatUntil = 0.0;
+    double CrouchDamageImmunityUntil = 0.0;
 
     UPROPERTY(ReplicatedUsing=OnRep_AimRotation)
     FRotator AimRotation;
@@ -264,6 +268,9 @@ private:
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> HealingDynamicMaterial;
 
+    /** Restored when the shield drops; avoids hard-coding the hero Blueprint's collision setup. */
+    TEnumAsByte<ECollisionResponse> DefaultPawnCollisionResponse = ECR_Block;
+
     bool HasConsensus(EConsensusAction Action) const;
     void EnsureVisibleMesh();
     void ConfigureCamera();
@@ -273,5 +280,6 @@ private:
     void ProcessActions();
     void FireGun();
     void UpdateRecoilHeat(float DeltaSeconds);
+    void TriggerWeaponOverheat();
     void ConfigureAbilityVisuals();
 };

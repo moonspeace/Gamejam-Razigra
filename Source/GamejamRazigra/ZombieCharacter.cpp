@@ -15,8 +15,10 @@
 #include "Materials/MaterialInterface.h"
 #include "Kismet/GameplayStatics.h"
 #include "Net/UnrealNetwork.h"
+#include "NavigationSystem.h"
 #include "SharedHeroCharacter.h"
 #include "TimerManager.h"
+#include "EngineUtils.h"
 
 AZombieCharacter::AZombieCharacter()
 {
@@ -37,8 +39,14 @@ AZombieCharacter::AZombieCharacter()
     GetCharacterMovement()->bOrientRotationToMovement = true;
     GetCharacterMovement()->bUseControllerDesiredRotation = false;
     GetCharacterMovement()->RotationRate = FRotator(0.0f, 420.0f, 0.0f);
+    GetCharacterMovement()->bUseRVOAvoidance = true;
+    GetCharacterMovement()->AvoidanceConsiderationRadius = 420.0f;
+    GetCharacterMovement()->AvoidanceWeight = 0.65f;
     // Camera weapon traces use Visibility. Pawn collision ignores it by default.
     GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Visibility, ECR_Block);
+    // A crowd behind the hero must never push the third-person camera into the character.
+    // Camera booms probe on ECC_Camera, independently from weapon visibility traces.
+    GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 
     // These two must be set here and not in BeginPlay. ACharacter::PostInitializeComponents caches
     // the mesh's relative transform into BaseTranslationOffset/BaseRotationOffset, and that runs
@@ -57,6 +65,10 @@ void AZombieCharacter::BeginPlay()
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
     Health = Data->ZombieMaxHealth;
     GetCharacterMovement()->MaxWalkSpeed = Data->ZombieMoveSpeed;
+    // Stable per-agent formation phase prevents every zombie choosing the same approach lane.
+    TacticalAngleRadians = FMath::Fmod(static_cast<float>(GetUniqueID()) * 2.39996323f, 2.0f * PI);
+    LastProgressLocation = GetActorLocation();
+    LastProgressCheckTime = GetWorld()->GetTimeSeconds();
 
     if (USkeletalMesh* MeshAsset = Data->ZombieMesh.LoadSynchronous())
     {
@@ -67,6 +79,7 @@ void AZombieCharacter::BeginPlay()
     {
         GetMesh()->SetAnimInstanceClass(AnimationClass);
     }
+    StartSpawnEffect();
 }
 
 void AZombieCharacter::Tick(float DeltaSeconds)
@@ -75,6 +88,11 @@ void AZombieCharacter::Tick(float DeltaSeconds)
     if (bIsDead)
     {
         UpdateDeathEffect(DeltaSeconds);
+        return;
+    }
+    if (bSpawnEffectActive)
+    {
+        UpdateSpawnEffect(DeltaSeconds);
         return;
     }
     if (HasAuthority() && !bIsDead)
@@ -154,14 +172,79 @@ void AZombieCharacter::UpdateServerBehavior()
             StartAttack();
         }
     }
-    else if (AI && Now >= NextPathRefreshTime)
+    else if (AI)
     {
-        // Chasing again: character movement takes facing back over.
-        GetCharacterMovement()->bOrientRotationToMovement = true;
-        NextPathRefreshTime = Now + Data->ZombiePathRefreshInterval;
-        AI->MoveToActor(TargetHero, MeleeReach * 0.8f, true, true, true, nullptr, true);
+        const FVector HeroLocation = TargetHero->GetActorLocation();
+        const bool bHeroMoved = FVector::DistSquared2D(HeroLocation, LastTrackedHeroLocation)
+            >= FMath::Square(Data->ZombieReactiveRepathDistance);
+        bool bRecovering = false;
+        if (Now - LastProgressCheckTime >= Data->ZombieStuckRecoverySeconds)
+        {
+            const float Progress = FVector::Dist2D(GetActorLocation(), LastProgressLocation);
+            bRecovering = Progress < 18.0f && GetVelocity().Size2D() < 35.0f;
+            LastProgressLocation = GetActorLocation();
+            LastProgressCheckTime = Now;
+        }
+        if (Now >= NextPathRefreshTime || bHeroMoved || bRecovering)
+        {
+            GetCharacterMovement()->bOrientRotationToMovement = true;
+            // Never let an old serialized data asset make reactions feel sluggish.
+            NextPathRefreshTime = Now + FMath::Min(Data->ZombiePathRefreshInterval, 0.18f);
+            LastTrackedHeroLocation = HeroLocation;
+            const FVector Goal = CalculateTacticalGoal(bRecovering);
+            AI->MoveToLocation(Goal, 28.0f, true, true, true, false, nullptr, true);
+        }
     }
 
+}
+
+FVector AZombieCharacter::CalculateTacticalGoal(bool bRecovering) const
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    FVector PredictedHero = TargetHero->GetActorLocation()
+        + TargetHero->GetVelocity() * Data->ZombieTargetPredictionSeconds;
+
+    // Slowly orbit each stable slot, producing flanks without making the formation spin wildly.
+    const float Time = GetWorld()->GetTimeSeconds();
+    const float Angle = TacticalAngleRadians + Time * (bRecovering ? 0.9f : 0.10f);
+    const FVector RingOffset(FMath::Cos(Angle), FMath::Sin(Angle), 0.0f);
+    FVector Goal = PredictedHero + RingOffset * Data->ZombieEngagementRadius;
+
+    FVector Separation = FVector::ZeroVector;
+    int32 NeighborCount = 0;
+    for (TActorIterator<AZombieCharacter> It(GetWorld()); It; ++It)
+    {
+        const AZombieCharacter* Other = *It;
+        if (Other == this || Other->IsDead()) continue;
+        FVector Away = GetActorLocation() - Other->GetActorLocation();
+        Away.Z = 0.0f;
+        const float Distance = Away.Size();
+        if (Distance > KINDA_SMALL_NUMBER && Distance < Data->ZombieSeparationRadius)
+        {
+            Separation += Away / Distance * (1.0f - Distance / Data->ZombieSeparationRadius);
+            ++NeighborCount;
+        }
+    }
+    if (NeighborCount > 0)
+    {
+        Goal += Separation.GetClampedToMaxSize(1.0f)
+            * Data->ZombieSeparationRadius * Data->ZombieSeparationStrength;
+    }
+    if (bRecovering)
+    {
+        // A decisive tangent step breaks capsule queues and asks navigation for a new corridor.
+        Goal += FVector(-RingOffset.Y, RingOffset.X, 0.0f) * Data->ZombieSeparationRadius * 1.5f;
+    }
+
+    FNavLocation Projected;
+    if (UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
+    {
+        if (Nav->ProjectPointToNavigation(Goal, Projected, FVector(180.0f, 180.0f, 260.0f)))
+        {
+            return Projected.Location;
+        }
+    }
+    return Goal;
 }
 
 void AZombieCharacter::StartAttack()
@@ -183,7 +266,25 @@ void AZombieCharacter::ResolveAttack()
     const float Distance = IsValid(TargetHero)
         ? FVector::Dist2D(GetActorLocation(), TargetHero->GetActorLocation())
         : TNumericLimits<float>::Max();
-    const bool bHitHero = IsValid(TargetHero) && !TargetHero->IsDead() && Distance <= MeleeReach;
+    bool bHitHero = false;
+    FHitResult ObstructionHit;
+    if (IsValid(TargetHero) && !TargetHero->IsDead()
+        && !TargetHero->IsCrouchDamageImmunityActive() && Distance <= MeleeReach)
+    {
+        const FVector Start = GetActorLocation() + FVector::UpVector * 65.0f;
+        const FVector End = TargetHero->GetActorLocation() + FVector::UpVector * 65.0f;
+        FCollisionQueryParams TraceParams(SCENE_QUERY_STAT(ZombieMeleeVisibility), false, this);
+        TraceParams.AddIgnoredActor(this);
+        const bool bSweepHit = GetWorld()->SweepSingleByChannel(ObstructionHit, Start, End,
+            FQuat::Identity, ECC_Visibility,
+            FCollisionShape::MakeSphere(Data->ZombieAttackTraceRadius), TraceParams);
+        bHitHero = bSweepHit && ObstructionHit.GetActor() == TargetHero;
+        if (bSweepHit && !bHitHero)
+        {
+            UE_LOG(LogRazigra, Verbose, TEXT("Zombie %s melee blocked by %s."), *GetName(),
+                ObstructionHit.GetActor() ? *ObstructionHit.GetActor()->GetName() : TEXT("world geometry"));
+        }
+    }
     if (bHitHero)
     {
         const float Applied = UGameplayStatics::ApplyDamage(TargetHero, Data->ZombieAttackDamage,
@@ -204,7 +305,7 @@ void AZombieCharacter::ResolveAttack()
 float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
     AController* EventInstigator, AActor* DamageCauser)
 {
-    if (!HasAuthority() || bIsDead)
+    if (!HasAuthority() || bIsDead || bSpawnEffectActive)
     {
         return 0.0f;
     }
@@ -215,7 +316,7 @@ float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damag
         UGlobalGameData::Get(this)->ZombieMaxHealth);
     if (Applied > 0.0f)
     {
-        MulticastDamageReceived(Applied);
+        MulticastDamageReceived(Applied, Health <= 0.0f);
     }
     if (Health <= 0.0f)
     {
@@ -226,6 +327,8 @@ float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damag
         bIsDead = true;
         bIsAttacking = false;
         GetWorldTimerManager().ClearTimer(RestoreAnimationTimer);
+        GetWorldTimerManager().ClearTimer(HitFlashTimer);
+        PreHitMaterials.Reset();
         GetCharacterMovement()->DisableMovement();
         GetCharacterMovement()->StopMovementImmediately();
         if (AAIController* AI = Cast<AAIController>(GetController()))
@@ -245,9 +348,13 @@ float AZombieCharacter::TakeDamage(float DamageAmount, FDamageEvent const& Damag
     return Applied;
 }
 
-void AZombieCharacter::MulticastDamageReceived_Implementation(float DamageAmount)
+void AZombieCharacter::MulticastDamageReceived_Implementation(float DamageAmount, bool bLethalHit)
 {
     BP_OnZombieDamaged(DamageAmount);
+    if (!bLethalHit)
+    {
+        StartHitEffect();
+    }
     if (!GetWorld())
     {
         return;
@@ -283,6 +390,122 @@ void AZombieCharacter::MulticastDamageReceived_Implementation(float DamageAmount
     {
         Number->InitializeDamageNumber(DamageAmount, LocalController);
     }
+}
+
+void AZombieCharacter::StartSpawnEffect()
+{
+    if (!GetMesh()) return;
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    UMaterialInterface* SpawnMaterial = Data->ZombieSpawnMaterial.LoadSynchronous();
+    if (!SpawnMaterial)
+    {
+        // Old GlobalGameData assets serialize newly-added soft references as None, so retain a
+        // cooked fallback until the asset is opened and resaved by a designer.
+        SpawnMaterial = LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath"));
+    }
+    if (!SpawnMaterial)
+    {
+        UE_LOG(LogRazigra, Warning, TEXT("Zombie spawn material is missing for %s."), *GetName());
+        return;
+    }
+
+    SpawnEffectElapsed = 0.0f;
+    bSpawnEffectActive = true;
+    SpawnMaterials.Reset();
+    PreSpawnMaterials.Reset();
+    const int32 SlotCount = FMath::Max(1, GetMesh()->GetNumMaterials());
+    for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+    {
+        PreSpawnMaterials.Add(GetMesh()->GetMaterial(Slot));
+        UMaterialInstanceDynamic* Dynamic = UMaterialInstanceDynamic::Create(SpawnMaterial, this);
+        Dynamic->SetVectorParameterValue(TEXT("DeathColor"),
+            Data->ZombieSpawnEffectColor * Data->ZombieSpawnEffectIntensity);
+        Dynamic->SetVectorParameterValue(TEXT("SpawnColor"), Data->ZombieSpawnEffectColor);
+        Dynamic->SetScalarParameterValue(TEXT("DissolveAmount"), 1.0f);
+        Dynamic->SetScalarParameterValue(TEXT("BlinkAmount"), 1.0f);
+        Dynamic->SetScalarParameterValue(TEXT("EdgeWidth"), Data->ZombieSpawnEdgeWidth);
+        GetMesh()->SetMaterial(Slot, Dynamic);
+        SpawnMaterials.Add(Dynamic);
+    }
+    UE_LOG(LogRazigra, Verbose, TEXT("Zombie %s assembling with spawn material %s."),
+        *GetName(), *SpawnMaterial->GetPathName());
+}
+
+void AZombieCharacter::UpdateSpawnEffect(float DeltaSeconds)
+{
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    SpawnEffectElapsed += DeltaSeconds;
+    const float Alpha = FMath::Clamp(SpawnEffectElapsed /
+        FMath::Max(0.05f, Data->ZombieSpawnEffectDuration), 0.0f, 1.0f);
+    const float Dissolve = 1.0f - FMath::InterpEaseOut(0.0f, 1.0f, Alpha, 2.2f);
+    const float Pulse = FMath::Clamp((1.0f - Alpha)
+        * (0.72f + 0.28f * FMath::Sin(Alpha * 8.0f * PI)), 0.0f, 1.0f);
+    for (UMaterialInstanceDynamic* Material : SpawnMaterials)
+    {
+        if (!Material) continue;
+        Material->SetScalarParameterValue(TEXT("DissolveAmount"), Dissolve);
+        Material->SetScalarParameterValue(TEXT("BlinkAmount"), Pulse);
+    }
+    if (Alpha >= 1.0f) FinishSpawnEffect();
+}
+
+void AZombieCharacter::FinishSpawnEffect()
+{
+    if (GetMesh())
+    {
+        for (int32 Slot = 0; Slot < PreSpawnMaterials.Num(); ++Slot)
+        {
+            GetMesh()->SetMaterial(Slot, PreSpawnMaterials[Slot]);
+        }
+    }
+    SpawnMaterials.Reset();
+    PreSpawnMaterials.Reset();
+    bSpawnEffectActive = false;
+}
+
+void AZombieCharacter::StartHitEffect()
+{
+    if (!GetMesh() || bIsDead) return;
+    const UGlobalGameData* Data = UGlobalGameData::Get(this);
+    UMaterialInterface* FlashBase = Data->ZombieDeathMaterial.LoadSynchronous();
+    if (!FlashBase)
+    {
+        FlashBase = LoadObject<UMaterialInterface>(nullptr,
+            TEXT("/Game/Materials/M_ZombieDeath.M_ZombieDeath"));
+    }
+    if (!FlashBase) return;
+
+    const int32 SlotCount = FMath::Max(1, GetMesh()->GetNumMaterials());
+    if (PreHitMaterials.IsEmpty())
+    {
+        PreHitMaterials.Reserve(SlotCount);
+        for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+        {
+            PreHitMaterials.Add(GetMesh()->GetMaterial(Slot));
+        }
+    }
+    for (int32 Slot = 0; Slot < SlotCount; ++Slot)
+    {
+        UMaterialInstanceDynamic* Flash = UMaterialInstanceDynamic::Create(FlashBase, this);
+        Flash->SetVectorParameterValue(TEXT("DeathColor"),
+            Data->ZombieHitFlashColor * Data->ZombieHitFlashIntensity);
+        Flash->SetScalarParameterValue(TEXT("BlinkAmount"), 1.0f);
+        Flash->SetScalarParameterValue(TEXT("DissolveAmount"), 0.0f);
+        GetMesh()->SetMaterial(Slot, Flash);
+    }
+    GetWorldTimerManager().SetTimer(HitFlashTimer, this, &ThisClass::RestoreHitEffect,
+        Data->ZombieHitFlashDuration, false);
+}
+
+void AZombieCharacter::RestoreHitEffect()
+{
+    if (!GetMesh() || bIsDead) { PreHitMaterials.Reset(); return; }
+    for (int32 Slot = 0; Slot < PreHitMaterials.Num(); ++Slot)
+    {
+        GetMesh()->SetMaterial(Slot, PreHitMaterials[Slot]);
+    }
+    PreHitMaterials.Reset();
 }
 
 void AZombieCharacter::MulticastAttack_Implementation()

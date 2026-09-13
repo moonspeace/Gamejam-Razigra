@@ -30,6 +30,7 @@ ASharedHeroCharacter::ASharedHeroCharacter()
     SetCanBeDamaged(true);
 
     GetCapsuleComponent()->InitCapsuleSize(42.0f, 96.0f);
+    DefaultPawnCollisionResponse = GetCapsuleComponent()->GetCollisionResponseToChannel(ECC_Pawn);
     GetMesh()->SetRelativeLocationAndRotation(FVector(0.0f, 0.0f, -96.0f), FRotator(0.0f, -90.0f, 0.0f));
     GetCharacterMovement()->bRunPhysicsWithNoController = true;
     // The hero faces wherever the players are aiming and strafes around that, so character
@@ -228,10 +229,30 @@ void ASharedHeroCharacter::UpdateRecoilHeat(float DeltaSeconds)
         return;
     }
 
-    if (!HasConsensus(EConsensusAction::Fire) && RecoilHeat > 0.0f)
+    if (bShieldActive)
+    {
+        RecoilHeat = FMath::Min(1.0f, RecoilHeat + Data->ShieldHeatPerSecond * DeltaSeconds);
+        if (RecoilHeat >= 1.0f)
+        {
+            bShieldActive = false;
+            OnRep_AbilityState();
+            TriggerWeaponOverheat();
+        }
+    }
+    else if (!HasConsensus(EConsensusAction::Fire) && RecoilHeat > 0.0f)
     {
         RecoilHeat = FMath::Max(0.0f, RecoilHeat - Data->RecoilCooldownPerSecond * DeltaSeconds);
     }
+}
+
+void ASharedHeroCharacter::TriggerWeaponOverheat()
+{
+    if (bWeaponOverheated) return;
+    bWeaponOverheated = true;
+    RecoilHeat = 1.0f;
+    OverheatUntil = GetWorld()->GetTimeSeconds() + UGlobalGameData::Get(this)->RecoilOverheatSeconds;
+    MulticastWeaponOverheated();
+    ForceNetUpdate();
 }
 
 void ASharedHeroCharacter::MulticastWeaponOverheated_Implementation()
@@ -255,7 +276,12 @@ void ASharedHeroCharacter::SetParticipantAbility(int32 ParticipantIndex, bool bP
             return;
         }
         if (ParticipantIndex == 0) bHealingActive = true;
-        if (ParticipantIndex == 1) bShieldActive = true;
+        if (ParticipantIndex == 1)
+        {
+            // Shield and gun share one heat budget; an overheated character cannot raise it.
+            if (bWeaponOverheated || RecoilHeat >= 1.0f) return;
+            bShieldActive = true;
+        }
         ParticipantActions[ParticipantIndex][static_cast<int32>(EConsensusAction::Fire)] = false;
         RefreshActionMasks();
     }
@@ -331,6 +357,14 @@ void ASharedHeroCharacter::OnRep_AbilityState()
         PlusPiece->SetVisibility(bHealingActive, true);
     }
     ShieldMesh->SetVisibility(bShieldActive, true);
+    // Zombies use the Pawn object channel. Ignoring that channel on the hero makes collision
+    // non-blocking in both directions for every existing and newly spawned zombie, without
+    // disabling zombie/world collision (which would make them fall through the level).
+    if (UCapsuleComponent* HeroCapsule = GetCapsuleComponent())
+    {
+        HeroCapsule->SetCollisionResponseToChannel(ECC_Pawn,
+            bShieldActive ? ECR_Ignore : DefaultPawnCollisionResponse.GetValue());
+    }
     BP_OnHealingStateChanged(bHealingActive);
     BP_OnShieldStateChanged(bShieldActive);
 }
@@ -453,9 +487,9 @@ void ASharedHeroCharacter::ProcessMovement()
     const float RightValue = (HasConsensus(EConsensusAction::MoveRight) ? 1.0f : 0.0f)
         - (HasConsensus(EConsensusAction::MoveLeft) ? 1.0f : 0.0f);
 
-    if (IsAbilityRooting())
+    if (bHealingActive)
     {
-        // Healing and the shield plant the hero. Only horizontal motion is cancelled, so a
+        // Healing plants the hero. Only horizontal motion is cancelled, so a
         // player who triggers one mid-air still falls instead of freezing in the sky.
         if (GetCharacterMovement()->IsMovingOnGround())
         {
@@ -534,6 +568,11 @@ void ASharedHeroCharacter::ProcessActions()
     if (bCrouchConsensus && !bIsCrouched)
     {
         Crouch();
+        if (bIsCrouched)
+        {
+            CrouchDamageImmunityUntil = GetWorld()->GetTimeSeconds()
+                + UGlobalGameData::Get(this)->CrouchDamageImmunitySeconds;
+        }
     }
     else if (!bCrouchConsensus && bIsCrouched)
     {
@@ -558,6 +597,12 @@ void ASharedHeroCharacter::ProcessActions()
     }
 }
 
+bool ASharedHeroCharacter::IsCrouchDamageImmunityActive() const
+{
+    return bIsCrouched && GetWorld()
+        && GetWorld()->GetTimeSeconds() < CrouchDamageImmunityUntil;
+}
+
 void ASharedHeroCharacter::FireGun()
 {
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
@@ -565,12 +610,7 @@ void ASharedHeroCharacter::FireGun()
     NextFireTime = Now + Data->FireInterval;
 
     RecoilHeat = FMath::Clamp(RecoilHeat + Data->RecoilHeatPerShot, 0.0f, 1.0f);
-    if (RecoilHeat >= 1.0f && !bWeaponOverheated)
-    {
-        bWeaponOverheated = true;
-        OverheatUntil = Now + Data->RecoilOverheatSeconds;
-        MulticastWeaponOverheated();
-    }
+    if (RecoilHeat >= 1.0f) TriggerWeaponOverheat();
     FiringVisualUntil = Now + FMath::Min(Data->FireInterval, 0.12f);
     bIsFiring = true;
 
