@@ -37,6 +37,7 @@ public:
     void ShowFireFeedback(bool bHit);
 
     void PlayIntroCinematic(double ServerStartTime);
+    void PlayIntroCinematicNow();
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Zombie Zero|HUD Style")
     FLinearColor PlayerOneColor;
@@ -134,6 +135,7 @@ private:
     float OverheatFlashTime = 0.0f;
     double PendingCinematicServerTime = -1.0;
     bool bCinematicMediaReady = false;
+    bool bStartCinematicImmediately = false;
 
     void BuildCombatIndicators(class UOverlay* Root);
     void BuildDamageVignette(class UOverlay* Root);

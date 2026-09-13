@@ -75,6 +75,7 @@ void ACoopGameMode::RestartRunInPlace()
         if (ACoopPlayerController* Controller = Pair.Key.Get())
         {
             Controller->ClientSetPuzzleFocus(nullptr);
+            Controller->ClientStartRunPresentation();
         }
     }
     UE_LOG(LogRazigra, Log, TEXT("In-place run reset completed for all connected players."));
@@ -170,12 +171,11 @@ void ACoopGameMode::EnsureSharedHero()
                 Controller->ClientBindToSharedHero(State->SharedHero);
             }
         }
-        State->StartIntroCinematic();
         for (const TPair<TWeakObjectPtr<ACoopPlayerController>, int32>& Pair : AssignedSlots)
         {
             if (ACoopPlayerController* Controller = Pair.Key.Get())
             {
-                Controller->ClientStartIntroCinematic(State->CinematicStartServerTime);
+                Controller->ClientStartRunPresentation();
             }
         }
     }

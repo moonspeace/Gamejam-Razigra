@@ -9,6 +9,7 @@ class ASharedHeroCharacter;
 class AHologramPuzzle;
 enum class EPuzzleDirection : uint8;
 class UCoopHudWidget;
+class USceneComponent;
 
 /** Owns one network player's input, while both players view the same pawn. */
 UCLASS(Blueprintable)
@@ -85,6 +86,9 @@ protected:
     UFUNCTION(Client, Reliable)
     void ClientStartIntroCinematic(double ServerStartTime);
 
+    UFUNCTION(Client, Reliable)
+    void ClientStartRunPresentation();
+
     UFUNCTION()
     void OnRep_PlayerSlot();
 
@@ -110,11 +114,16 @@ private:
     float SharedHeroSearchTime = 0.0f;
     double PendingCinematicStartTime = -1.0;
     double LastCinematicStartTime = -1.0;
+    bool bPendingImmediateCinematic = false;
+    TMap<TWeakObjectPtr<AActor>, FTransform> InitialLocalGateTransforms;
+    TMap<TWeakObjectPtr<USceneComponent>, FTransform> InitialLocalGateComponentTransforms;
 
     void HoldScreenBlack();
     void FadeScreenIn();
     void ShowGameplayHud();
     void HideGameplayHud();
+    void CaptureLocalGateState();
+    void ResetLocalGates();
     void SetAction(EConsensusAction Action, bool bPressed);
     void MoveForwardPressed();
     void MoveForwardReleased();

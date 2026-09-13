@@ -1,6 +1,7 @@
 #include "CoopPlayerController.h"
 
 #include "Camera/PlayerCameraManager.h"
+#include "Components/SceneComponent.h"
 #include "CoopGameState.h"
 #include "CoopGameMode.h"
 #include "CoopHudWidget.h"
@@ -25,6 +26,7 @@ void ACoopPlayerController::BeginPlay()
     Super::BeginPlay();
     if (IsLocalController())
     {
+        CaptureLocalGateState();
         const UGameInstance* Instance = GetGameInstance();
         const UEOSSessionSubsystem* Sessions = Instance
             ? Instance->GetSubsystem<UEOSSessionSubsystem>() : nullptr;
@@ -180,7 +182,12 @@ void ACoopPlayerController::ShowGameplayHud()
     if (GameplayHud)
     {
         GameplayHud->AddToViewport(10);
-        if (PendingCinematicStartTime >= 0.0)
+        if (bPendingImmediateCinematic)
+        {
+            bPendingImmediateCinematic = false;
+            GameplayHud->PlayIntroCinematicNow();
+        }
+        else if (PendingCinematicStartTime >= 0.0)
         {
             GameplayHud->PlayIntroCinematic(PendingCinematicStartTime);
         }
@@ -208,6 +215,60 @@ void ACoopPlayerController::StartLevelCinematic(double ServerStartTime)
 void ACoopPlayerController::ClientStartIntroCinematic_Implementation(double ServerStartTime)
 {
     StartLevelCinematic(ServerStartTime);
+}
+
+void ACoopPlayerController::ClientStartRunPresentation_Implementation()
+{
+    ResetLocalGates();
+    if (GameplayHud)
+    {
+        GameplayHud->PlayIntroCinematicNow();
+    }
+    else
+    {
+        bPendingImmediateCinematic = true;
+    }
+}
+
+void ACoopPlayerController::CaptureLocalGateState()
+{
+    InitialLocalGateTransforms.Reset();
+    InitialLocalGateComponentTransforms.Reset();
+    UClass* GateClass = LoadClass<AActor>(nullptr, TEXT("/Game/BP_Gate.BP_Gate_C"));
+    if (!GateClass || !GetWorld())
+    {
+        return;
+    }
+    for (TActorIterator<AActor> It(GetWorld(), GateClass); It; ++It)
+    {
+        AActor* Gate = *It;
+        InitialLocalGateTransforms.Add(Gate, Gate->GetActorTransform());
+        TArray<USceneComponent*> Components;
+        Gate->GetComponents(Components);
+        for (USceneComponent* Component : Components)
+        {
+            InitialLocalGateComponentTransforms.Add(Component, Component->GetRelativeTransform());
+        }
+    }
+}
+
+void ACoopPlayerController::ResetLocalGates()
+{
+    for (const TPair<TWeakObjectPtr<AActor>, FTransform>& Pair : InitialLocalGateTransforms)
+    {
+        if (AActor* Gate = Pair.Key.Get())
+        {
+            Gate->Reset();
+            Gate->SetActorTransform(Pair.Value, false, nullptr, ETeleportType::TeleportPhysics);
+        }
+    }
+    for (const TPair<TWeakObjectPtr<USceneComponent>, FTransform>& Pair : InitialLocalGateComponentTransforms)
+    {
+        if (USceneComponent* Component = Pair.Key.Get())
+        {
+            Component->SetRelativeTransform(Pair.Value, false, nullptr, ETeleportType::TeleportPhysics);
+        }
+    }
 }
 
 void ACoopPlayerController::HideGameplayHud()

@@ -165,9 +165,23 @@ void UCoopHudWidget::PlayIntroCinematic(double ServerStartTime)
     CinematicPlayer->OpenSource(Source);
 }
 
+void UCoopHudWidget::PlayIntroCinematicNow()
+{
+    bStartCinematicImmediately = true;
+    PlayIntroCinematic(0.0);
+}
+
 void UCoopHudWidget::HandleCinematicOpened(FString OpenedUrl)
 {
     bCinematicMediaReady = true;
+    if (bStartCinematicImmediately && CinematicPlayer)
+    {
+        bStartCinematicImmediately = false;
+        PendingCinematicServerTime = -1.0;
+        CinematicPlayer->Seek(FTimespan::Zero());
+        CinematicPlayer->Play();
+        CinematicOverlay->SetVisibility(ESlateVisibility::Visible);
+    }
 }
 
 void UCoopHudWidget::HandleCinematicEnded()
@@ -178,6 +192,7 @@ void UCoopHudWidget::HandleCinematicEnded()
     }
     PendingCinematicServerTime = -1.0;
     bCinematicMediaReady = false;
+    bStartCinematicImmediately = false;
 }
 
 void UCoopHudWidget::NativeDestruct()
