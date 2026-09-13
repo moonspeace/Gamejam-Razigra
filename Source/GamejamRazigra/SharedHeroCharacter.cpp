@@ -191,6 +191,14 @@ void ASharedHeroCharacter::Tick(float DeltaSeconds)
         return;
     }
 
+    if (bCrouchImmunityVisualActive
+        && GetWorld()->GetTimeSeconds() >= CrouchDamageImmunityUntil)
+    {
+        bCrouchImmunityVisualActive = false;
+        OnRep_AbilityState();
+        ForceNetUpdate();
+    }
+
     ProcessLook();
     ProcessMovement();
     ProcessActions();
@@ -256,8 +264,9 @@ void ASharedHeroCharacter::UpdateShieldVisual(float DeltaSeconds)
     }
 
     const UGlobalGameData* Data = UGlobalGameData::Get(this);
-    const float TargetAlpha = bShieldActive ? 1.0f : 0.0f;
-    const float FadeSeconds = bShieldActive ? Data->ShieldFadeInSeconds : Data->ShieldFadeOutSeconds;
+    const bool bShowShieldVisual = bShieldActive || bCrouchImmunityVisualActive;
+    const float TargetAlpha = bShowShieldVisual ? 1.0f : 0.0f;
+    const float FadeSeconds = bShowShieldVisual ? Data->ShieldFadeInSeconds : Data->ShieldFadeOutSeconds;
     ShieldVisualAlpha = FMath::FInterpConstantTo(
         ShieldVisualAlpha, TargetAlpha, DeltaSeconds, 1.0f / FMath::Max(0.01f, FadeSeconds));
 
@@ -268,7 +277,7 @@ void ASharedHeroCharacter::UpdateShieldVisual(float DeltaSeconds)
     ShieldDynamicMaterial->SetScalarParameterValue(TEXT("Opacity"),
         Data->ShieldColor.A * ShieldVisualAlpha);
 
-    if (!bShieldActive && ShieldVisualAlpha <= KINDA_SMALL_NUMBER)
+    if (!bShowShieldVisual && ShieldVisualAlpha <= KINDA_SMALL_NUMBER)
     {
         ShieldMesh->SetVisibility(false, true);
     }
@@ -392,7 +401,7 @@ void ASharedHeroCharacter::OnRep_AbilityState()
     }
     // Activation must be visible immediately so Tick can fade it in. Deactivation remains
     // visible until UpdateShieldVisual finishes fading the material to zero.
-    if (bShieldActive)
+    if (bShieldActive || bCrouchImmunityVisualActive)
     {
         ShieldMesh->SetVisibility(true, true);
     }
@@ -604,19 +613,37 @@ void ASharedHeroCharacter::ProcessLook()
 void ASharedHeroCharacter::ProcessActions()
 {
     const bool bCrouchConsensus = HasConsensus(EConsensusAction::Crouch);
-    if (bCrouchConsensus && !bIsCrouched)
+    if (bCrouchConsensus)
     {
-        Crouch();
-        if (bIsCrouched)
+        if (!bIsCrouched)
+        {
+            Crouch();
+        }
+
+        // Crouch() queues the movement transition, so bIsCrouched is not guaranteed to be
+        // true until the following movement update. Start the timed effect from the input
+        // consensus edge instead of testing the deferred movement state in this same frame.
+        if (!bWasCrouchConsensus)
         {
             CrouchDamageImmunityUntil = GetWorld()->GetTimeSeconds()
                 + UGlobalGameData::Get(this)->CrouchDamageImmunitySeconds;
+            bCrouchImmunityVisualActive = true;
+            OnRep_AbilityState();
+            ForceNetUpdate();
         }
     }
-    else if (!bCrouchConsensus && bIsCrouched)
+    else
     {
+        // Also clears a crouch request that has not reached the movement update yet.
         UnCrouch();
+        if (bCrouchImmunityVisualActive)
+        {
+            bCrouchImmunityVisualActive = false;
+            OnRep_AbilityState();
+            ForceNetUpdate();
+        }
     }
+    bWasCrouchConsensus = bCrouchConsensus;
 
     const bool bJumpConsensus = HasConsensus(EConsensusAction::Jump) && !IsAbilityRooting();
     if (bJumpConsensus && !bWasJumpConsensus)
@@ -879,6 +906,7 @@ void ASharedHeroCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>&
     DOREPLIFETIME(ASharedHeroCharacter, bIsDead);
     DOREPLIFETIME(ASharedHeroCharacter, bHealingActive);
     DOREPLIFETIME(ASharedHeroCharacter, bShieldActive);
+    DOREPLIFETIME(ASharedHeroCharacter, bCrouchImmunityVisualActive);
     DOREPLIFETIME(ASharedHeroCharacter, RecoilHeat);
     DOREPLIFETIME(ASharedHeroCharacter, bWeaponOverheated);
     DOREPLIFETIME(ASharedHeroCharacter, RequiredConsensusParticipants);

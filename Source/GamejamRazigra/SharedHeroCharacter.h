@@ -243,6 +243,7 @@ private:
 
     double OverheatUntil = 0.0;
     double CrouchDamageImmunityUntil = 0.0;
+    bool bWasCrouchConsensus = false;
 
     UPROPERTY(ReplicatedUsing=OnRep_AimRotation)
     FRotator AimRotation;
@@ -261,6 +262,10 @@ private:
 
     UPROPERTY(ReplicatedUsing=OnRep_AbilityState)
     bool bShieldActive = false;
+
+    /** Replicated presentation flag for the short damage-immunity window started by crouching. */
+    UPROPERTY(ReplicatedUsing=OnRep_AbilityState)
+    bool bCrouchImmunityVisualActive = false;
 
     UPROPERTY(Transient)
     TObjectPtr<UMaterialInstanceDynamic> ShieldDynamicMaterial;
