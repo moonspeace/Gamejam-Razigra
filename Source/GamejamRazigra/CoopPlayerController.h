@@ -6,6 +6,8 @@
 #include "CoopPlayerController.generated.h"
 
 class ASharedHeroCharacter;
+class AHologramPuzzle;
+enum class EPuzzleDirection : uint8;
 class UCoopHudWidget;
 
 /** Owns one network player's input, while both players view the same pawn. */
@@ -43,6 +45,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Razigra")
     int32 GetDisplayedRole() const;
 
+    void SetPuzzleFocus(AHologramPuzzle* Puzzle);
+
 protected:
     UFUNCTION(Server, Reliable)
     void ServerSetAction(EConsensusAction Action, bool bPressed);
@@ -58,6 +62,15 @@ protected:
 
     UFUNCTION(Server, Reliable)
     void ServerRequestRestartRun();
+
+    UFUNCTION(Server, Reliable)
+    void ServerTogglePuzzleInteraction();
+
+    UFUNCTION(Server, Reliable)
+    void ServerPuzzleInput(EPuzzleDirection Direction, bool bActivate);
+
+    UFUNCTION(Client, Reliable)
+    void ClientSetPuzzleFocus(AHologramPuzzle* Puzzle);
 
     UFUNCTION(Client, Reliable)
     void ClientBindToSharedHero(ASharedHeroCharacter* Hero);
@@ -79,6 +92,9 @@ private:
 
     UPROPERTY()
     TObjectPtr<UCoopHudWidget> GameplayHud;
+
+    UPROPERTY()
+    TObjectPtr<AHologramPuzzle> ActivePuzzle;
 
     FVector2D PendingLookInput = FVector2D::ZeroVector;
     float SharedHeroSearchTime = 0.0f;
@@ -105,6 +121,7 @@ private:
     void AbilityPressed();
     void AbilityReleased();
     void SwitchSoloRole();
+    void InteractPressed();
     void LookX(float Value);
     void LookY(float Value);
 };

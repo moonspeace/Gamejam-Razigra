@@ -6,7 +6,9 @@
 #include "EOSSessionSubsystem.h"
 #include "Engine/GameInstance.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GlobalGameData.h"
+#include "HologramPuzzle.h"
 #include "Net/UnrealNetwork.h"
 #include "RazigraGameInstance.h"
 
@@ -68,7 +70,7 @@ void ACoopPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
 
-    if (IsLocalController() && !PendingLookInput.IsNearlyZero())
+    if (IsLocalController() && !ActivePuzzle && !PendingLookInput.IsNearlyZero())
     {
         ServerSubmitLook(PendingLookInput);
         PendingLookInput = FVector2D::ZeroVector;
@@ -108,6 +110,7 @@ void ACoopPlayerController::SetupInputComponent()
     InputComponent->BindAction(TEXT("RoleAbility"), IE_Pressed, this, &ThisClass::AbilityPressed);
     InputComponent->BindAction(TEXT("RoleAbility"), IE_Released, this, &ThisClass::AbilityReleased);
     InputComponent->BindAction(TEXT("SwitchSoloRole"), IE_Pressed, this, &ThisClass::SwitchSoloRole);
+    InputComponent->BindAction(TEXT("Interact"), IE_Pressed, this, &ThisClass::InteractPressed);
     InputComponent->BindAxis(TEXT("ConsensusLookX"), this, &ThisClass::LookX);
     InputComponent->BindAxis(TEXT("ConsensusLookY"), this, &ThisClass::LookY);
 }
@@ -139,7 +142,7 @@ void ACoopPlayerController::BindToSharedHero(ASharedHeroCharacter* Hero)
         return;
     }
     SharedHero = Hero;
-    SetViewTarget(Hero);
+    if (!ActivePuzzle) SetViewTarget(Hero);
     bShowMouseCursor = false;
     SetInputMode(FInputModeGameOnly());
 
@@ -241,9 +244,78 @@ void ACoopPlayerController::ClientBindToSharedHero_Implementation(ASharedHeroCha
 
 void ACoopPlayerController::SetAction(EConsensusAction Action, bool bPressed)
 {
+    if (ActivePuzzle)
+    {
+        if (!bPressed) return;
+        switch (Action)
+        {
+        case EConsensusAction::MoveForward:  ServerPuzzleInput(EPuzzleDirection::North, false); break;
+        case EConsensusAction::MoveBackward: ServerPuzzleInput(EPuzzleDirection::South, false); break;
+        case EConsensusAction::MoveLeft:     ServerPuzzleInput(EPuzzleDirection::West, false); break;
+        case EConsensusAction::MoveRight:    ServerPuzzleInput(EPuzzleDirection::East, false); break;
+        case EConsensusAction::Jump:         ServerPuzzleInput(EPuzzleDirection::North, true); break;
+        default: break;
+        }
+        return;
+    }
     if (PlayerSlot != INDEX_NONE)
     {
         ServerSetAction(Action, bPressed);
+    }
+}
+
+void ACoopPlayerController::SetPuzzleFocus(AHologramPuzzle* Puzzle)
+{
+    if (!IsLocalController()) return;
+    ActivePuzzle = Puzzle;
+    if (GameplayHud) GameplayHud->SetVisibility(Puzzle ? ESlateVisibility::Collapsed : ESlateVisibility::SelfHitTestInvisible);
+    if (Puzzle) SetViewTargetWithBlend(Puzzle, Puzzle->ViewBlendTime, EViewTargetBlendFunction::VTBlend_Cubic);
+    else if (SharedHero) SetViewTargetWithBlend(SharedHero, 0.55f, EViewTargetBlendFunction::VTBlend_Cubic);
+}
+
+void ACoopPlayerController::ClientSetPuzzleFocus_Implementation(AHologramPuzzle* Puzzle)
+{
+    SetPuzzleFocus(Puzzle);
+}
+
+void ACoopPlayerController::ServerTogglePuzzleInteraction_Implementation()
+{
+    if (!GetWorld()) return;
+    for (TActorIterator<AHologramPuzzle> It(GetWorld()); It; ++It)
+    {
+        if (It->IsFocused())
+        {
+            It->SetFocused(false);
+            ClientSetPuzzleFocus(nullptr);
+            return;
+        }
+    }
+    const ACoopGameState* State = GetWorld()->GetGameState<ACoopGameState>();
+    ASharedHeroCharacter* Hero = State ? State->SharedHero : nullptr;
+    AHologramPuzzle* Nearest = nullptr;
+    float Best = TNumericLimits<float>::Max();
+    for (TActorIterator<AHologramPuzzle> It(GetWorld()); It; ++It)
+    {
+        if (!It->IsWithinInteractionRange(Hero) || It->IsSolved()) continue;
+        const float Distance = FVector::DistSquared(It->GetActorLocation(), Hero->GetActorLocation());
+        if (Distance < Best) { Best = Distance; Nearest = *It; }
+    }
+    if (Nearest)
+    {
+        Hero->ResetParticipant(0); Hero->ResetParticipant(1);
+        Nearest->SetFocused(true);
+        ClientSetPuzzleFocus(Nearest);
+    }
+}
+
+void ACoopPlayerController::ServerPuzzleInput_Implementation(EPuzzleDirection Direction, bool bActivate)
+{
+    for (TActorIterator<AHologramPuzzle> It(GetWorld()); It; ++It)
+    {
+        if (!It->IsFocused()) continue;
+        if (bActivate) It->ActivateSelection(); else It->MoveSelection(Direction);
+        if (It->IsSolved()) ClientSetPuzzleFocus(nullptr);
+        return;
     }
 }
 
@@ -331,6 +403,7 @@ void ACoopPlayerController::FireReleased() { SetAction(EConsensusAction::Fire, f
 void ACoopPlayerController::AbilityPressed() { ServerSetRoleAbility(true); }
 void ACoopPlayerController::AbilityReleased() { ServerSetRoleAbility(false); }
 void ACoopPlayerController::SwitchSoloRole() { ServerSwitchSoloRole(); }
+void ACoopPlayerController::InteractPressed() { ServerTogglePuzzleInteraction(); }
 void ACoopPlayerController::LookX(float Value) { PendingLookInput.X = Value; }
 void ACoopPlayerController::LookY(float Value) { PendingLookInput.Y = Value; }
 
