@@ -11,7 +11,23 @@ class UWidgetComponent;
 class UPuzzleBoardWidget;
 
 UENUM(BlueprintType)
-enum class EPuzzleCellType : uint8 { Empty, Start, End, Mirror, Blocker, ColorSwitch };
+enum class EPuzzleCellType : uint8
+{
+    Empty,
+    Start,
+    End,
+    Mirror,
+    /** Filled square: stops the beam whatever colour it is. */
+    Blocker,
+    /** Open circle: while switched on it recolours the beam passing through it. */
+    ColorSwitch,
+    /** Open square: lets its own colour straight through and stops every other colour. */
+    ColorFilter
+};
+
+/** One puzzle action, which only happens once both players ask for it. */
+UENUM()
+enum class EPuzzleInput : uint8 { MoveNorth, MoveEast, MoveSouth, MoveWest, Activate };
 
 UENUM(BlueprintType)
 enum class EPuzzleLaserColor : uint8 { Red, Green, Blue };
@@ -73,7 +89,18 @@ public:
      * own render target is 8-bit, so this tint multiply is what actually gets it into HDR.
      */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Hologram", meta=(ClampMin="1.0", ClampMax="12.0"))
-    float BloomIntensity = 3.5f;
+    float BloomIntensity = 1.75f;
+
+    /**
+     * How long one player's press waits for the other to match it. Both have to ask for the
+     * same thing inside this window before the board does anything.
+     */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Consensus", meta=(ClampMin="0.05"))
+    float ConsensusToleranceSeconds = 0.5f;
+
+    /** Off lets either player move the cursor alone; rotating and switching always need both. */
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Puzzle|Consensus")
+    bool bRequireConsensusForSelection = true;
 
     UFUNCTION(BlueprintImplementableEvent, Category="Puzzle")
     void BP_OnPuzzleSolved();
@@ -82,6 +109,14 @@ public:
     UFUNCTION(BlueprintPure, Category="Puzzle") bool IsSolved() const { return bSolved; }
     bool IsWithinInteractionRange(const ASharedHeroCharacter* Hero) const;
     void SetFocused(bool bNewFocused);
+
+    /** Routed from a player controller. Acts only once both players agree on the same input. */
+    void SubmitInput(int32 ParticipantIndex, EPuzzleInput Input);
+
+    /** Bit 0 = player one is waiting on player two, bit 1 = the other way round. */
+    UFUNCTION(BlueprintPure, Category="Puzzle")
+    int32 GetPendingInputMask() const { return PendingInputMask; }
+
     void MoveSelection(EPuzzleDirection Direction);
     void ActivateSelection();
 
@@ -105,6 +140,11 @@ private:
     UPROPERTY(ReplicatedUsing=OnRep_State) int32 SelectedCell = INDEX_NONE;
     UPROPERTY(ReplicatedUsing=OnRep_State) bool bFocused = false;
     UPROPERTY(ReplicatedUsing=OnRep_State) bool bSolved = false;
+    UPROPERTY(ReplicatedUsing=OnRep_State) int32 PendingInputMask = 0;
+
+    static constexpr int32 PuzzleParticipantCount = 2;
+    EPuzzleInput PendingInput[PuzzleParticipantCount] = {};
+    double PendingInputTime[PuzzleParticipantCount] = {};
 
     int32 BoardWidth = 5;
     int32 BoardHeight = 5;
@@ -117,4 +157,6 @@ private:
     bool TraceLaser(TArray<FPuzzleLaserSegment>& OutPath) const;
     int32 Index(int32 X, int32 Y) const { return Y * BoardWidth + X; }
     bool IsInteractive(int32 CellIndex) const;
+    void RunInput(EPuzzleInput Input);
+    void RefreshPendingMask();
 };

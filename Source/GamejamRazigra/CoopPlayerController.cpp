@@ -310,10 +310,26 @@ void ACoopPlayerController::ServerTogglePuzzleInteraction_Implementation()
 
 void ACoopPlayerController::ServerPuzzleInput_Implementation(EPuzzleDirection Direction, bool bActivate)
 {
+    if (PlayerSlot == INDEX_NONE)
+    {
+        return;
+    }
+    EPuzzleInput Input = EPuzzleInput::Activate;
+    if (!bActivate)
+    {
+        switch (Direction)
+        {
+        case EPuzzleDirection::North: Input = EPuzzleInput::MoveNorth; break;
+        case EPuzzleDirection::East:  Input = EPuzzleInput::MoveEast;  break;
+        case EPuzzleDirection::South: Input = EPuzzleInput::MoveSouth; break;
+        default:                      Input = EPuzzleInput::MoveWest;  break;
+        }
+    }
     for (TActorIterator<AHologramPuzzle> It(GetWorld()); It; ++It)
     {
         if (!It->IsFocused()) continue;
-        if (bActivate) It->ActivateSelection(); else It->MoveSelection(Direction);
+        // The board waits for both players, so hand it the slot that asked.
+        It->SubmitInput(PlayerSlot, Input);
         if (It->IsSolved()) ClientSetPuzzleFocus(nullptr);
         return;
     }

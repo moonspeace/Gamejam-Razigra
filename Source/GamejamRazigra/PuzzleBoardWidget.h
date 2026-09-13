@@ -24,6 +24,13 @@ public:
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Puzzle|Style")
     FLinearColor SelectionColor = FLinearColor(1.0f, 0.92f, 0.35f, 1.0f);
 
+    /** Match the HUD: the bracket takes this colour while that player waits for the other. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Puzzle|Style")
+    FLinearColor PlayerOneColor = FLinearColor(0.85f, 0.13f, 0.16f, 1.0f);
+
+    UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category="Puzzle|Style")
+    FLinearColor PlayerTwoColor = FLinearColor(0.09f, 0.45f, 0.95f, 1.0f);
+
 protected:
     virtual int32 NativePaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry,
         const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements,
